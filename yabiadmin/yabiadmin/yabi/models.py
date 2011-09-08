@@ -199,9 +199,9 @@ class Tool(Base):
             'job_type': self.job_type,
             'inputExtensions':self.input_filetype_extensions(),                     
             'outputExtensions': list(self.tooloutputextension_set.values("must_exist", "must_be_larger_than", "file_extension__pattern")),            
-            'parameter_list': list(self.toolparameter_set.order_by('id').values("id", "rank", "mandatory", "hidden", "input_file", "output_file",
+            'parameter_list': list(self.toolparameter_set.order_by('id').values("id", "rank", "mandatory", "hidden", "file_assignment", "output_file",
                                                                                 "switch", "switch_use__display_text", "switch_use__formatstring","switch_use__description",
-                                                                                "possible_values","default_value","helptext","batch_param", "batch_bundle_files", "use_output_filename__switch"))
+                                                                                "possible_values","default_value","helptext", "batch_bundle_files", "use_output_filename__switch"))
             }
             
         for index in range(len(tool_dict['outputExtensions'])):
@@ -259,6 +259,12 @@ class ParameterSwitchUse(Base):
     def __unicode__(self):
         return self.display_text
 
+FILE_ASSIGNMENT_CHOICES = (
+    ('none', 'No input files'),
+    ('batch', 'Batch files'),
+    ('all', 'Consume all files'),
+)
+
 class ToolParameter(Base):
     tool = models.ForeignKey(Tool)
     switch = models.CharField(max_length=64)
@@ -266,7 +272,10 @@ class ToolParameter(Base):
     rank = models.IntegerField(null=True, blank=True)
     mandatory = models.BooleanField(blank=True, default=False)
     hidden = models.BooleanField(blank=True, default=False)
-    input_file = models.BooleanField(blank=True, default=False)
+    
+    # replaced with file_assignment
+    #input_file = models.BooleanField(blank=True, default=False)
+    
     output_file = models.BooleanField(blank=True, default=False)
     accepted_filetypes = models.ManyToManyField(FileType, blank=True)
     #use_batch_filename = models.BooleanField(default=False)
@@ -275,9 +284,12 @@ class ToolParameter(Base):
     default_value = models.TextField(null=True, blank=True)
     helptext = models.TextField(null=True, blank=True)
     
-    # this replaces the Tool level batch_on_param and batch_on_param_bundle_files
-    batch_param = models.BooleanField(blank=False, null=False, default=False)
+    # this is replaced by a setting in file_assignment
+    #batch_param = models.BooleanField(blank=False, null=False, default=False)
     batch_bundle_files = models.BooleanField(blank=False, null=False, default=False)
+    
+    # this replaces batch_param with a 'file assignment mode' that determines if it 'batches' or 'consumes all'
+    file_assignment = models.CharField(max_length=5, null=False, choices=FILE_ASSIGNMENT_CHOICES)
     
     # this foreign key points to the tool parameter (that is a batch_on_param) that we will derive the output filename for this switch from
     use_output_filename = models.ForeignKey('ToolParameter', null=True, blank=True)
@@ -288,7 +300,7 @@ class ToolParameter(Base):
     rank.help_text="The order in which the switches should appear. Leave blank if order is unimportant."
     mandatory.help_text="Select if the switch is required as input."
     hidden.help_text="Select if the switch should be hidden from users in the frontend."
-    input_file.help_text="Select if the switch takes a file as input from another tool."
+    #input_file.help_text="Select if the switch takes a file as input from another tool."
     output_file.help_text="Select if the switch is specifying an output file."
     accepted_filetypes.help_text="The extensions of accepted filetypes for this switch."
     #use_batch_filename.help_text="If selected the tool will use the batch parameter file name as the basename of the output"
