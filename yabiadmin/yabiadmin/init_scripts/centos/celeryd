@@ -1,0 +1,83 @@
+#!/bin/bash
+#
+# celeryd	This shell script takes care of starting and stopping
+#		celeryd for BioFlow.
+#
+# chkconfig: - 58 74
+# description: celeryd
+
+# Source function library.
+. /etc/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+# Default params, override in /etc/sysconfig/celeryd
+SOURCE="/usr/local/python/ccgapps/yabiadmin/release/yabiadmin"
+VIRTUAL_PYTHON="$SOURCE/virtualpython"
+CELERYD="$SOURCE/init_scripts/centos/celerydrun"
+USER=apache
+
+# required by celeryd
+DJANGO_SETTINGS_MODULE="settings"
+DJANGO_PROJECT_DIR="$SOURCE"
+CELERY_LOADER="django"
+CELERY_CHDIR="$SOURCE"
+PYTHONPATH="/usr/local/etc/ccgapps:$SOURCE:/usr/local/python/ccgapps/yabiadmin/release"
+PYTHON_EGG_CACHE="/usr/local/python/ccgapps/yabiadmin/.egg_cache"
+PROJECT_DIRECTORY="$SOURCE"
+export DJANGO_SETTINGS_MODULE DJANGO_PROJECT_DIR CELERY_LOADER CELERY_CHDIR PYTHONPATH PROJECT_DIRECTORY PYTHON_EGG_CACHE
+
+if [ -f /etc/sysconfig/celeryd ];then
+        . /etc/sysconfig/celeryd
+fi
+
+RETVAL=0
+prog="celeryd"
+
+start() {
+	# Check that networking is up.
+	[ "$NETWORKING" = "no" ] && exit 1
+
+        # Start daemons.
+        echo -n $"Starting $prog: "
+        #daemon --user $USER $CELERYD
+        runuser -s /bin/bash -p -  $USER -c $CELERYD
+	RETVAL=$?
+        echo
+        [ $RETVAL -eq 0 ] && touch /var/lock/subsys/celeryd
+	return $RETVAL
+}
+
+stop() {
+        echo -n $"Shutting down $prog: "
+	killproc celeryd
+	RETVAL=$?
+        echo
+        [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/celeryd
+	return $RETVAL
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start
+        ;;
+  stop)
+	stop
+        ;;
+  status)
+	status celeryd
+	RETVAL=$?
+	;;
+  restart)
+	stop
+	start
+	RETVAL=$?
+	;;
+  *)
+        echo $"Usage: $0 {start|stop|restart|status}"
+        RETVAL=3
+esac
+
+exit $RETVAL
