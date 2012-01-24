@@ -37,8 +37,7 @@ import urllib
 DEBUG = False
 
 class SSHAuth(object):
-    
-    def AuthProxyUser(self, yabiusername, scheme, username, hostname, path, *args):
+    def AuthProxyUser(self, yabiusername, scheme, username, hostname, path, credtype="fs"):
         """Auth a user via getting the credentials from the json yabiadmin backend. When the credentials are gathered, successcallback is called with the deferred.
         The deferred should be the result channel your result will go back down"""
         useragent = "YabiFS/0.1"
@@ -46,21 +45,7 @@ class SSHAuth(object):
         try:
             # get credential for uri...
             from TaskManager.TaskTools import UserCreds
-            credentials = UserCreds(yabiusername, "%s://%s@%s%s"%(scheme,username,hostname,urllib.quote(path)))
-            if False:
-                path = os.path.join(config.yabiadminpath,"ws/credential/%s/?uri="%(yabiusername)+urllib.quote("%s://%s@%s%s"%(scheme,username,hostname,path)))
-                host = config.yabiadminserver
-                port = config.yabiadminport
-                
-                if DEBUG:
-                    print "SSHAuth getting credential. Doing GET on path:",path
-                    print "host:",host
-                    print "port:",port
-                
-                status, message, data = RetryGET( path = path, host=host, port=port )
-                
-                assert status==200
-                credentials = json.loads( data )
+            credentials = UserCreds(yabiusername, "%s://%s@%s%s"%(scheme,username,hostname,urllib.quote(path)), credtype=credtype)
             
             assert 'key' in credentials and 'cert' in credentials and 'password' in credentials, "Malformed credential JSON received from admin. I received: %s"%(str(credentials))
             

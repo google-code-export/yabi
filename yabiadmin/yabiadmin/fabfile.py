@@ -16,6 +16,8 @@ env.content_includes.extend([]) # add quoted patterns here for extra rsync inclu
 env.auto_confirm_purge = False #controls whether the confirmation prompt for purge is used
 
 env.celeryd_options = "--config=settings -l debug -E -B"
+env.ccg_pip_options = "--download-cache=/tmp --use-mirrors --no-index --mirrors=http://c.pypi.python.org/ --mirrors=http://d.pypi.python.org/ --mirrors=http://e.pypi.python.org/"
+
 
 class LocalPaths():
 
@@ -45,13 +47,12 @@ class LocalPaths():
 localPaths = LocalPaths()
 
 
-def deploy(auto_confirm_purge = False):
+def deploy(auto_confirm_purge = False, migration = True):
     """
     Make a user deployment
     """
     env.auto_confirm_purge = auto_confirm_purge
-    _ccg_deploy_user()
-    _munge_settings()
+    _ccg_deploy_user(migration)
 
 def snapshot(auto_confirm_purge=False):
     """
@@ -60,27 +61,28 @@ def snapshot(auto_confirm_purge=False):
     env.auto_confirm_purge=auto_confirm_purge
     _ccg_deploy_snapshot()
     localPaths.target="snapshot"
-    _munge_settings(debug_logging='logging.WARNING', sentry=True) #pass string for warning, not actual logging.WARNING
 
-def release(*args):
+def release(*args, **kwargs):
     """
     Make a release deployment
     """
+    migration = kwargs.get("migration", True)
+    requirements = kwargs.get("requirements", "requirements.txt")
+    tag = kwargs.get("tag", None)
+    env.ccg_requirements = requirements
     env.auto_confirm=False
-    if len(args):
-        _ccg_deploy_release(tag=args[0])
-    else:
-        _ccg_deploy_release()
-        
-def testrelease(*args):
+    _ccg_deploy_release(tag=tag,migration=migration)
+
+def testrelease(*args, **kwargs):
     """
     Make a release deployment using the dev settings file
     """
+    migration = kwargs.get("migration", True)
     env.auto_confirm=False
     if len(args):
-        _ccg_deploy_release(devrelease=True, tag=args[0])
+        _ccg_deploy_release(devrelease=True, tag=args[0], migration=migration)
     else:
-        _ccg_deploy_release(devrelease=True)
+        _ccg_deploy_release(devrelease=True, migration=migration)
 
 def purge(auto_confirm_purge=False):
     """
@@ -129,13 +131,6 @@ def manage(*args):
     _django_env()
     print local(localPaths.getVirtualPython() + " " + localPaths.getProjectDir() + "/manage.py " + " ".join(args), capture=False)
 
-def _munge_settings(**kwargs):
-    print local("sed -i -r -e 's/<CCG_TARGET_NAME>/%s/g' %s"  % (localPaths.target, localPaths.getSettings()))
-    if kwargs.get('sentry'):
-        print local("sed -i -r -e 's/SENTRY_TESTING = False/SENTRY_TESTING = True/g' %s"  % (localPaths.getSettings()))
-    if kwargs.get('debug_logging'):
-        print local("sed -i -r -e 's/LOGGING_LEVEL = logging.DEBUG/LOGGING_LEVEL = %s/g' %s"  % (kwargs.get('debug_logging'),localPaths.getSettings()))
-
 def _celeryd():
     _django_env()
     print local("python -m celery.bin.celeryd " + env.celeryd_options, capture=False)
@@ -158,3 +153,4 @@ def _celery_env():
     os.environ["CELERY_LOADER"]="django" 
     os.environ["CELERY_CHDIR"]="." 
     os.environ["PROJECT_DIRECTORY"] = "." 
+    os.environ["PYTHONPATH"] = ".:.."

@@ -30,18 +30,17 @@ from django.http import HttpResponse, HttpResponseNotFound, HttpResponseServerEr
 from django.shortcuts import render_to_response, get_object_or_404
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.core import urlresolvers
-from django.utils import webhelpers
 from django.db import transaction 
 from django.utils import simplejson as json
 from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
-
+from ccg.utils import webhelpers
 from yabiadmin.yabiengine.tasks import walk
 from yabiadmin.yabiengine.models import Task, Job, Workflow, Syslog
 from yabiadmin.yabiengine.enginemodels import EngineTask, EngineJob, EngineWorkflow
 
 import logging
-logger = logging.getLogger('yabiengine')
+logger = logging.getLogger(__name__)
 
 from constants import *
 
