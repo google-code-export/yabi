@@ -35,9 +35,10 @@ from django.db import models, connection, transaction
 from django.db.models import Q
 from django.db.transaction import enter_transaction_management, leave_transaction_management, managed, is_dirty, is_managed
 from django.conf import settings
-from django.utils import simplejson as json, webhelpers
+from django.utils import simplejson as json
+from ccg.utils import webhelpers
 from django.db.models.signals import post_save
-from django.utils.webhelpers import url
+from ccg.utils.webhelpers import url
 
 from django.db.transaction import TransactionManagementError
 
@@ -52,7 +53,7 @@ from yabiadmin.yabiengine.YabiJobException import YabiJobException
 from yabiadmin.yabistoreapp import db
 
 import logging
-logger = logging.getLogger('yabiengine')
+logger = logging.getLogger(__name__)
 
 from constants import *
 from yabistoreapp import db
@@ -70,6 +71,7 @@ class EngineWorkflow(Workflow):
     def workflow_id(self):
         return self.id
 
+    @transaction.commit_on_success
     def build(self):
         logger.debug('----- Building workflow id %d -----' % self.id)
 
@@ -207,8 +209,12 @@ class EngineJob(Job):
     def __init__(self, *args, **kwargs):
         ret = Job.__init__(self,*args, **kwargs)
         if self.command_template:
-            self.template = CommandTemplate()
-            self.template.deserialise(self.command_template)
+            try:
+                self.template = CommandTemplate()
+                self.template.deserialise(self.command_template)
+            except ValueError, e: 
+                logger.warning("Unable to deserialise command_template on engine job id: %s" % self.id)
+
         else:
             self.template = None
         return ret
@@ -333,8 +339,11 @@ class EngineJob(Job):
                 cursor.execute('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE' % Task._meta.db_table)
             elif (settings.DATABASES['default']['ENGINE'] == 'django.db.backends.mysql'):
                 cursor.execute('LOCK TABLES %s WRITE, %s WRITE' % (Task._meta.db_table, StageIn._meta.db_table))
+            elif (settings.DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3'):
+                # don't do anything!
+                pass
             else:
-                assert("Locking code not implemented for db backend %s " % settings.DATABASES['default']['engine'])
+                assert("Locking code not implemented for db backend %s " % settings.DATABASES['default']['ENGINE'])
 
             if (self.total_tasks() == 0):
                 logger.debug("job %s is having tasks created" % self.id) 
@@ -342,9 +351,9 @@ class EngineJob(Job):
             else:
                 logger.debug("job %s has tasks, skipping create_tasks" % self.id)
 
-            transaction.commit()
             if (settings.DATABASES['default']['ENGINE'] == 'django.db.backends.mysql'):
                 cursor.execute('UNLOCK TABLES')
+            transaction.commit()
             logger.debug('Committed, released lock')
         except:
             logger.critical(traceback.format_exc())
