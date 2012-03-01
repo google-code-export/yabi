@@ -90,7 +90,7 @@ class SSHPbsproConnector(ExecConnector, ssh.KeyStore.KeyStore):
         configdir = config.config['backend']['certificates']
         ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
     
-    @conf_retry()
+    @conf_retry((SSHQsubException,))
     def _ssh_qsub(self, yabiusername, creds, command, working, username, host, remoteurl, submission, stdout, stderr, modules, walltime=None, memory=None, cpus=None, queue=None ):
         """This submits via ssh the qsub command. This returns the jobid, or raises an exception on an error"""
         assert type(modules) is not str and type(modules) is not unicode, "parameter modules should be sequence or None, not a string or unicode"
