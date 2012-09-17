@@ -111,36 +111,32 @@ class FileCopyResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
 
-    @hmac_authenticated
-    def handle_copy(self, request):
-        # override default priority
-        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_COPY_PRIORITY
-
-        # break our request path into parts
-        #print "Copy",request,request.args
-        if 'src' not in request.args or 'dst' not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "copy must specify source 'src' and destination 'dst'\n")
-        
-        # compile any credentials together to pass to backend
+    def handle_copy(self, src, dst, **kwargs):
+        """call with 
+        src and dst - uris.
+        then your credentials as one of:
+        yabiusername: just pass this in to have backend gather credentials
+        or
+        src_key, src_password, src_username, src_cert, dst_key, dst_password, dst_username, dst_cert: If you have the creds pass them in like this
+        """
         creds={}
-        for part in ['src','dst']:
-            for varname in ['key','password','username','cert']:
-                keyname = "%s_%s"%(part,varname)
-                if keyname in request.args:
-                    if part not in creds:
-                        creds[part]={}
-                    creds[part][varname] = request.args[keyname][0]
-                    del request.args[keyname]
-        
-        yabiusername = request.args['yabiusername'][0] if "yabiusername" in request.args else None
-        
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
-        src = request.args['src'][0]
-        dst = request.args['dst'][0]
             
-        #print "Copying from %s -> %s"%(src,dst)
+        if 'yabiusername' not in kwargs:
+            for keyname in ['src_key', 'src_password', 'src_username', 'src_cert', 'dst_key', 'dst_password', 'dst_username', 'dst_cert']:
+                assert keyname in kwargs, "credentials not passed in correctly"
+                
+            # compile any credentials together to pass to backend
+            for part in ['src','dst']:
+                for varname in ['key','password','username','cert']:
+                    keyname = "%s_%s"%(part,varname)
+                    if keyname in kwargs:
+                        if part not in creds:
+                            creds[part]={}
+                        creds[part][varname] = kwargs[keyname]
         
+        else:
+            yabiusername = kwargs['yabiusername']
+                
         src_scheme, src_address = parse_url(src)
         dst_scheme, dst_address = parse_url(dst)
         
@@ -157,9 +153,6 @@ class FileCopyResource(resource.PostableResource):
         sbend = self.fsresource().GetBackend(src_scheme)
         dbend = self.fsresource().GetBackend(dst_scheme)
         
-        # copying from
-        #print "Copying from",sbend,"to",dbend
-        
         # create our delay generator in case things go pear shape
         # TODO: actually use these things
         src_fail_delays = sbend.NonFatalRetryGenerator()
@@ -167,21 +160,6 @@ class FileCopyResource(resource.PostableResource):
         
         src_retry_kws = sbend.NonFatalKeywords
         dst_retry_kws = dbend.NonFatalKeywords
-        
-        # if source and destination are the same, only make one lock on this backend
-        #if sbend == dbend:
-            #locks = [sbend.lock(),None]
-        #else:
-            #locks = [sbend.lock(),dbend.lock()]
-        
-        if DEBUG:
-            print "src_hostname",src_hostname
-            print "src_username",src_username
-            print "src_path",src_path, src_filename
-            print "dst_hostname",dst_hostname
-            print "dst_username",dst_username
-            print "dst_path",dst_path, dst_filename
-            print "creds:",creds
         
         # if no dest filename is provided, use the src_filename
         dst_filename = src_filename if not len(dst_filename) else dst_filename
@@ -197,9 +175,6 @@ class FileCopyResource(resource.PostableResource):
                 channel.addCallback(fifo_cleanup)
                 
             except BlockingException, be:
-                #sbend.unlock(locks[0])
-                #if locks[1]:
-                    #dbend.unlock(locks[1])
                 print traceback.format_exc()
                 channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
                 return
@@ -260,15 +235,39 @@ class FileCopyResource(resource.PostableResource):
                 #print "MSG",msg
                 channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, msg))
                 
-            #sbend.unlock(locks[0])
-            #if locks[1]:
-                #dbend.unlock(locks[1])
-            
         client_channel = defer.Deferred()
         
         tasklet = gevent.spawn(copy,client_channel)
         
         return client_channel
+        
+
+    @hmac_authenticated
+    def handle_copy_request(self, request):
+        # override default priority
+        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_COPY_PRIORITY
+
+        # break our request path into parts
+        #print "Copy",request,request.args
+        if 'src' not in request.args or 'dst' not in request.args:
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "copy must specify source 'src' and destination 'dst'\n")
+        
+        # compile any credentials together to pass to backend
+        creds={}
+        for part in ['src','dst']:
+            for varname in ['key','password','username','cert']:
+                keyname = "%s_%s"%(part,varname)
+                if keyname in request.args:
+                    if part not in creds:
+                        creds[part]={}
+                    creds[part][varname] = request.args[keyname][0]
+                    del request.args[keyname]
+        
+        yabiusername = request.args['yabiusername'][0] if "yabiusername" in request.args else None
+        
+        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
+        
+        return self.handle_copy( request.args['src'][0], request.args['dst'][0],  )
             
     def http_POST(self, request):
         """
@@ -281,7 +280,7 @@ class FileCopyResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_copy(request)
+            return self.handle_copy_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Copy Submission Failed %s\n"%res) )
@@ -289,5 +288,5 @@ class FileCopyResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_copy(request)
+        return self.handle_copy_request(request)
 
