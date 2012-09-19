@@ -55,6 +55,9 @@ DOWNLOAD_BLOCK_SIZE = 8192
 class FileGetResource(resource.PostableResource):
     VERSION=0.1
     
+    # all the kenames that compose credentials for both src and dst
+    KEYSET =    [ 'key','password','username','cert' ]
+    
     def __init__(self,request=None, path=None, fsresource=None):
         """Pass in the backends to be served out by this FSResource"""
         self.path = path
@@ -64,28 +67,26 @@ class FileGetResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
         
-    @hmac_authenticated
-    def handle_get(self, request):
-        # override default priority
-        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_GET_PRIORITY
+    def handle_get(self, uri, bytes=None, **kwargs):
+        creds = {}
+        yabiusername = None
+        bytes_to_read = bytes
         
-        if "uri" not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
-
-        uri = request.args['uri'][0]
-        yabiusername = request.args['yabiusername'][0] if 'yabiusername' in request.args else None
+        if 'yabiusername' not in kwargs:
+            for keyname in self.KEYSET:
+                assert keyname in kwargs, "credentials not passed in correctly"
+                
+            # compile any credentials together to pass to backend
+            for keyname in self.KEYSET:
+                if keyname in kwargs:
+                    if part not in creds:
+                        creds[part]={}
+                    creds[part][varname] = kwargs[keyname]
+        
+        else:
+            yabiusername = kwargs['yabiusername']
+        
         scheme, address = parse_url(uri)
-        
-        # compile any credentials together to pass to backend
-        creds={}
-        for varname in ['key','password','username','cert']:
-            if varname in request.args:
-                creds[varname] = request.args[varname][0]
-                del request.args[varname]
-        
-        # how many bytes to truncate the GET at
-        bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
-        
         if not hasattr(address,"username"):
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
         
@@ -175,6 +176,34 @@ class FileGetResource(resource.PostableResource):
         tasklet = gevent.spawn(download_tasklet, request, client_channel )
         
         return client_channel
+        
+        
+    @hmac_authenticated
+    def handle_get_request(self, request):
+        # override default priority
+        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_GET_PRIORITY
+        
+        if "uri" not in request.args:
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
+
+        uri = request.args['uri'][0]
+        yabiusername = request.args['yabiusername'][0] if 'yabiusername' in request.args else None
+        
+        # how many bytes to truncate the GET at
+        bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
+        
+        if "yabiusername" in request.args:
+            yabiusername = request.args['yabiusername'][0]
+            return self.handle_get( uri, bytes_to_read, yabiusername=yabiusername )
+        elif False not in [(X in request.args) for X in self.KEYSET]:
+            # all the other keys are present
+            keyvals = dict( [ (keyname,request.args[keyname][0]) for keyname in self.KEYSET ] )
+            return self.handle_get( uri, bytes_to_read, **keyvals)
+                                        
+        # fall through = error
+        return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, 
+            "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
+        )
     
     def http_POST(self, request):
         """
@@ -187,7 +216,7 @@ class FileGetResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_get(request)
+            return self.handle_get_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -195,5 +224,5 @@ class FileGetResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_get(request)
+        return self.handle_get_request(request)
    

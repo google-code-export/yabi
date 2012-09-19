@@ -126,14 +126,15 @@ class FileCopyResource(resource.PostableResource):
         or
         src_key, src_password, src_username, src_cert, dst_key, dst_password, dst_username, dst_cert: If you have the creds pass them in like this
         """
-        creds={}
+        creds = {}
+        yabiusername = None
             
         if 'yabiusername' not in kwargs:
             for keyname in self.KEYSET:
                 assert keyname in kwargs, "credentials not passed in correctly"
                 
             # compile any credentials together to pass to backend
-            for keyname in self.KEYSET
+            for keyname in self.KEYSET:
                 if keyname in kwargs:
                     if part not in creds:
                         creds[part]={}
@@ -256,10 +257,10 @@ class FileCopyResource(resource.PostableResource):
         if 'src' not in request.args or 'dst' not in request.args:
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "copy must specify source 'src' and destination 'dst'\n")
         
-        if "yabiusername" in requests.args:
+        if "yabiusername" in request.args:
             yabiusername = request.args['yabiusername'][0]
             return self.handle_copy( request.args['src'][0], request.args['dst'][0], yabiusername=yabiusername )
-        elif False not in [("%s_%s"%(part,varname) in request.args) for part in ('src','dst') for varname in ('key','password','username','cert')]:
+        elif False not in [(X in request.args) for X in self.KEYSET]:
             # all the other keys are present
             keyvals = dict( [ (keyname,request.args[keyname][0]) for keyname in self.KEYSET ] )
             return self.handle_copy( request.args['src'][0], request.args['dst'][0], **keyvals)
@@ -267,7 +268,7 @@ class FileCopyResource(resource.PostableResource):
         # fall through = error
         return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, 
             "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        ))
+        )
             
     def http_POST(self, request):
         """
