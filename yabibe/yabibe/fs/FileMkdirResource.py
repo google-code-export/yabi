@@ -58,8 +58,25 @@ class FileMkdirResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
+    def mkdir(self, uri, yabiusername=None, creds={}, priority=0):
+        """This is a call for an inner coroutine. This basically works out from the uri what backend is in action,
+        and calls the relevant mkdir. Exceptions bubble out of this. For REST action, you need to catch the return/exceptions
+        and make the relevant http callbacks
+        """
+        scheme, address = parse_url(uri)
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        fsresource = self.fsresource()
+        if scheme not in fsresource.Backends():
+            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%scheme)
+            
+        return fsresource.GetBackend(scheme).mkdir(hostname,path=path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+        
     @hmac_authenticated
-    def handle_mkdir(self, request):
+    def handle_mkdir_request(self, request):
         # override default priority
         priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_MKDIR_PRIORITY
 
@@ -67,8 +84,7 @@ class FileMkdirResource(resource.PostableResource):
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "copy must specify a directory 'uri' to make\n")
         
         uri = request.args['uri'][0]
-        scheme, address = parse_url(uri)
-
+        
         # compile any credentials together to pass to backend
         creds={}
         for varname in ['key','password','username','cert']:
@@ -79,35 +95,38 @@ class FileMkdirResource(resource.PostableResource):
         yabiusername = request.args['yabiusername'][0] if "yabiusername" in request.args else None
         
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
-        
-        fsresource = self.fsresource()
-        if scheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%scheme)
-            
-        bend = fsresource.GetBackend(scheme)
-        
-        # our client channel
+
         client_channel = defer.Deferred()
         
         def do_mkdir():
             #print "hostname=",hostname,"path=",path,"username=",username
             try:
-                mkdirer=bend.mkdir(hostname,path=path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+                self.mkdir(uri, yabiusername, creds, priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()
-                client_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(be)))
+                client_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE,
+                    {'content-type': http_headers.MimeType('text', 'plain')}, 
+                    stream=str(be)
+                ))
             except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()
-                client_channel.callback(http.Response( responsecode.FORBIDDEN, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
+                client_channel.callback(http.Response( responsecode.FORBIDDEN,
+                    {'content-type': http_headers.MimeType('text', 'plain')},
+                    stream=str(exception)
+                ))
+            except ValueError, ve:
+                print traceback.format_exc()
+                client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR,
+                    {'content-type': http_headers.MimeType('text', 'plain')},
+                    stream="Backend '%s' not found\n%s"%(uri.split(':')[0],str(exception))
+                ))
             except Exception, e:
                 print traceback.format_exc()
-                client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(e)))
+                client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR,
+                    {'content-type': http_headers.MimeType('text', 'plain')}, 
+                    stream=str(e)
+                ))
             
         tasklet = gevent.spawn(do_mkdir)
         
@@ -124,7 +143,7 @@ class FileMkdirResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_mkdir(request)
+            return self.handle_mkdir_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -132,5 +151,5 @@ class FileMkdirResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_mkdir(request)
+        return self.handle_mkdir_request(request)
     
