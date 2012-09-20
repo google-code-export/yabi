@@ -61,7 +61,7 @@ TAR_PATH = '/bin/tar'
 
 LS_TIME_STYLE = r"+%b %d  %Y"
 
-DEBUG = True
+DEBUG = False
  
 from decorators import conf_retry, call_count
 from LockQueue import LockQueue

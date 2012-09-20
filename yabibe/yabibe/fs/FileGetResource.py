@@ -78,11 +78,13 @@ class FileGetResource(resource.PostableResource):
                 
             # compile any credentials together to pass to backend
             for keyname in self.KEYSET:
+                print "k",keyname
                 if keyname in kwargs:
-                    if part not in creds:
-                        creds[part]={}
-                    creds[part][varname] = kwargs[keyname]
+                    if keyname not in creds:
+                        creds[keyname]={}
+                    creds[keyname] = kwargs[keyname]
         
+            print "creds",creds
         else:
             yabiusername = kwargs['yabiusername']
         
@@ -107,10 +109,11 @@ class FileGetResource(resource.PostableResource):
         # our client channel
         client_channel = defer.Deferred()
         
-        def download_tasklet(req, channel):
+        def download_tasklet(channel):
             """Tasklet to do file download"""
             try:
-                procproto, fifo = bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds, priority=priority)
+                print "TRY"
+                procproto, fifo = bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds)
                 
                 def fifo_cleanup(response):
                     os.unlink(fifo)
@@ -173,12 +176,12 @@ class FileGetResource(resource.PostableResource):
             return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Catastrophic codepath violation. This error should never happen. It's a bug!" ))
 
         
-        tasklet = gevent.spawn(download_tasklet, request, client_channel )
+        tasklet = gevent.spawn(download_tasklet, client_channel )
         
         return client_channel
         
         
-    @hmac_authenticated
+    #@hmac_authenticated
     def handle_get_request(self, request):
         # override default priority
         priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_GET_PRIORITY
@@ -193,14 +196,18 @@ class FileGetResource(resource.PostableResource):
         bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
         
         if "yabiusername" in request.args:
+            print "YABIUSERNAME"
             yabiusername = request.args['yabiusername'][0]
             return self.handle_get( uri, bytes_to_read, yabiusername=yabiusername )
         elif False not in [(X in request.args) for X in self.KEYSET]:
             # all the other keys are present
+            print "KEYS"
             keyvals = dict( [ (keyname,request.args[keyname][0]) for keyname in self.KEYSET ] )
+            print "keyvals",keyvals
             return self.handle_get( uri, bytes_to_read, **keyvals)
                                         
         # fall through = error
+        print "FALLTHROUGH"
         return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, 
             "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         )
