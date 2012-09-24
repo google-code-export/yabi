@@ -61,12 +61,24 @@ class FileListResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
         
-    def old_http_POST(self, request):
-        # break our request path into parts
-        return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "request must be GET\n")
-    
+    def ls(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
+        scheme, address = parse_url(uri)
+        bendname = scheme
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        # get the backend
+        fsresource = self.fsresource()
+        bend = fsresource.GetBackend(bendname)
+        
+        if DEBUG:
+                print "ls() hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
+        return bend.ls(hostname,path=path,port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+        
     #@hmac_authenticated
-    def handle_list(self, request):
+    def handle_list_request(self, request):
         if "uri" not in request.args:
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
 
@@ -75,17 +87,11 @@ class FileListResource(resource.PostableResource):
 
         uri = request.args['uri'][0]
         scheme, address = parse_url(uri)
-        
         if not hasattr(address,"username"):
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
         
         recurse = 'recurse' in request.args
-        bendname = scheme
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
-        
+                
         # compile any credentials together to pass to backend
         creds={}
         for varname in ['key','password','username','cert']:
@@ -101,21 +107,12 @@ class FileListResource(resource.PostableResource):
             print "URI",uri
             print "ADDRESS",address
         
-        # get the backend
-        fsresource = self.fsresource()
-        if bendname not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%bendname)
-            
-        bend = fsresource.GetBackend(bendname)
-        
         # our client channel
         client_channel = defer.Deferred()
         
         def do_list():
-            if DEBUG:
-                print "dolist() hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
             try:
-                lister=bend.ls(hostname,path=path,port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+                lister=self.ls(uri, recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, stream=json.dumps(lister)))
             except BlockingException, be:
                 print traceback.format_exc()
@@ -146,7 +143,7 @@ class FileListResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_list(request)
+            return self.handle_list_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -154,4 +151,4 @@ class FileListResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_list(request)
+        return self.handle_list_request(request)
