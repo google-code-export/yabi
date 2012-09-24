@@ -65,8 +65,25 @@ class FileDeleteResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
+    def delete(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
+        scheme, address = parse_url(uri)
+        bendname = scheme
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        fsresource = self.fsresource()
+        if bendname not in fsresource.Backends():
+            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%bendname)
+            
+        bend = fsresource.GetBackend(bendname)
+        
+        if not DISABLED:
+            return bend.rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+        
     @hmac_authenticated
-    def handle_delete(self, request):
+    def handle_delete_request(self, request):
         # override default priority
         priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_DELETE_PRIORITY
         
@@ -91,14 +108,6 @@ class FileDeleteResource(resource.PostableResource):
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         
         recurse = 'recurse' in request.args
-        bendname = scheme
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
- 
-        #print "URI",uri
-        #print "ADDRESS",address
         
         # get the backend
         fsresource = self.fsresource()
@@ -115,8 +124,7 @@ class FileDeleteResource(resource.PostableResource):
                 print "DO_RM hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
             try:
                 # if delete function is not disabled (for DEBUG purposes)
-                if not DISABLED:
-                    deleter=bend.rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+                deleter=self.rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()
@@ -144,7 +152,7 @@ class FileDeleteResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_delete(request)
+            return self.handle_delete_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -152,5 +160,5 @@ class FileDeleteResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_delete(request)
+        return self.handle_delete_request(request)
 

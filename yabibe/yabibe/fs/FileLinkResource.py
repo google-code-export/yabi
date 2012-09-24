@@ -58,8 +58,31 @@ class FileLinkResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
         
+    def link(self, target, link, yabiusername=None, creds={}, priority=0):
+        targetscheme, targetaddress = parse_url(targeturi)
+        linkscheme, linkaddress = parse_url(linkuri)
+        
+        # sanity checks
+        if targetscheme != linkscheme:
+            raise Exception, "scheme of target and link must be the same"
+        
+        for part in ['username','hostname','port']:
+            t = getattr(targetaddress,part)
+            l = getattr(linkaddress,part)
+            if t != l:
+                raise Exception, "link and target %s must be the same\n"%part
+            
+        username = targetaddress.username
+        hostname = targetaddress.hostname
+        port = targetaddress.port
+        
+        fsresource = self.fsresource()
+        bend = fsresource.GetBackend(targetscheme)
+        
+        return bend.ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+        
     @hmac_authenticated
-    def handle_mkdir(self, request):
+    def handle_link_request(self, request):
         # override default priority
         priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_LINK_PRIORITY
 
@@ -74,16 +97,6 @@ class FileLinkResource(resource.PostableResource):
         linkuri = request.args['link'][0]
         linkscheme, linkaddress = parse_url(linkuri)
         
-        # check that the uris both point to the same location
-        if targetscheme != linkscheme:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link and target schemes must be the same\n")
-        
-        for part in ['username','hostname','port']:
-            t = getattr(targetaddress,part)
-            l = getattr(linkaddress,part)
-            if t != l:
-                return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link and target %s must be the same\n"%part)
-        
         # compile any credentials together to pass to backend
         creds={}
         for varname in ['key','password','username','cert']:
@@ -95,23 +108,13 @@ class FileLinkResource(resource.PostableResource):
         
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         
-        username = targetaddress.username
-        hostname = targetaddress.hostname
-        port = targetaddress.port
-        
-        fsresource = self.fsresource()
-        if targetscheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%targetscheme)
-            
-        bend = fsresource.GetBackend(targetscheme)
-        
         # our client channel
         client_channel = defer.Deferred()
         
         def do_ln():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                linker=bend.ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+                linker=self.ln(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()
@@ -138,7 +141,7 @@ class FileLinkResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_mkdir(request)
+            return self.handle_link_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -146,5 +149,5 @@ class FileLinkResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_mkdir(request)
+        return self.handle_link_request(request)
     

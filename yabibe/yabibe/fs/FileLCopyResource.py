@@ -58,8 +58,33 @@ class FileLCopyResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
 
+    def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
+        srcscheme, srcaddress = parse_url(srcuri)
+        dstscheme, dstaddress = parse_url(dsturi)
+        
+        # check that the uris both point to the same location
+        if srcscheme != dstscheme:
+            raise Exception, "dst and src schemes must be the same"
+        for part in ['username','hostname','port']:
+            s = getattr(srcaddress,part)
+            d = getattr(dstaddress,part)
+            if s != d:
+                raise Exception, "dst and src %s must be the same\n"%part
+            
+        username = srcaddress.username
+        hostname = srcaddress.hostname
+        port = srcaddress.port
+        
+        fsresource = self.fsresource()
+        if srcscheme not in fsresource.Backends():
+            raise Exception, "Backend '%s' not found\n"%srcscheme
+            
+        bend = fsresource.GetBackend(srcscheme)
+        
+        return bend.cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+
     @hmac_authenticated
-    def handle_lcopy(self, request):
+    def handle_lcopy_request(self, request):
         # override default priority
         priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_LCOPY_PRIORITY
 
@@ -74,20 +99,7 @@ class FileLCopyResource(resource.PostableResource):
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link must specify a directory 'link' parameter\n")
                 
         srcuri = request.args['src'][0]
-        #srcuri = srcuri + ("*" if (recurse and srcuri.endswith('/')) else "")                               # for a recursive copy from /path/to/directory/, copy the *contents* of the directory
-        srcscheme, srcaddress = parse_url(srcuri)
         dsturi = request.args['dst'][0]
-        dstscheme, dstaddress = parse_url(dsturi)
-        
-        # check that the uris both point to the same location
-        if srcscheme != dstscheme:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "dst and src schemes must be the same\n")
-        
-        for part in ['username','hostname','port']:
-            s = getattr(srcaddress,part)
-            d = getattr(dstaddress,part)
-            if s != d:
-                return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "dst and src %s must be the same\n"%part)
         
         # compile any credentials together to pass to backend
         creds={}
@@ -99,24 +111,14 @@ class FileLCopyResource(resource.PostableResource):
         yabiusername = request.args['yabiusername'][0] if "yabiusername" in request.args else None
         
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
-        username = srcaddress.username
-        hostname = srcaddress.hostname
-        port = srcaddress.port
-        
-        fsresource = self.fsresource()
-        if srcscheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%srcscheme)
-            
-        bend = fsresource.GetBackend(srcscheme)
-        
+     
         # our client channel
         client_channel = defer.Deferred()
         
         def do_lcopy():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                copyer=bend.cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+                copyer=self.cp(hostname,src=srcuri,dst=dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()
@@ -143,7 +145,7 @@ class FileLCopyResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_lcopy(request)
+            return self.handle_lcopy_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -151,5 +153,5 @@ class FileLCopyResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_lcopy(request)
+        return self.handle_lcopy_request(request)
     
