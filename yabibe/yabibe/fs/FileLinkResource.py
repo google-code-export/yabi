@@ -59,8 +59,8 @@ class FileLinkResource(resource.PostableResource):
         self.fsresource = weakref.ref(fsresource)
         
     def link(self, target, link, yabiusername=None, creds={}, priority=0):
-        targetscheme, targetaddress = parse_url(targeturi)
-        linkscheme, linkaddress = parse_url(linkuri)
+        targetscheme, targetaddress = parse_url(target)
+        linkscheme, linkaddress = parse_url(link)
         
         # sanity checks
         if targetscheme != linkscheme:
@@ -114,7 +114,7 @@ class FileLinkResource(resource.PostableResource):
         def do_ln():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                linker=self.ln(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
+                linker=self.link(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()

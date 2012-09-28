@@ -118,7 +118,7 @@ class FileLCopyResource(resource.PostableResource):
         def do_lcopy():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                copyer=self.cp(hostname,src=srcuri,dst=dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
+                copyer=self.lcopy(hostname,src=srcuri,dst=dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()
