@@ -185,6 +185,7 @@ class SSHCopy(BaseShell):
         command += [ "-H", remotehost ] if remotehost else []
         command += [ "-x", 'tar --gzip --directory "%s" --create "%s"'%(path,filename if filename else ".") ]
         command += [ "-O", fifo ]
+        command += [ "-N" ]
         
         if DEBUG:
             print "CERTFILE",certfile
