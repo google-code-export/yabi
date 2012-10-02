@@ -204,7 +204,7 @@ def LCopy(src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
         except GETFailure, err:
             print "Warning: Post failed with error:",err
             if log_callback:
-                log_callback("Ln %s to %s failed with error: %s"%(link,target,err)) 
+                log_callback("Lcopy %s to %s failed with error: %s"%(src,dst,err)) 
     
         Sleep(delay_gen.next())
         

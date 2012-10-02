@@ -54,13 +54,13 @@ class FileLCopyResource(resource.PostableResource):
         self.path = path
         
         if not fsresource:
-            raise Exception, "FileLinkResource must be informed on construction as to which FSResource is its parent"
+            raise Exception, "FileLCopyResource must be informed on construction as to which FSResource is its parent"
         
         self.fsresource = weakref.ref(fsresource)
 
     def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
-        srcscheme, srcaddress = parse_url(srcuri)
-        dstscheme, dstaddress = parse_url(dsturi)
+        srcscheme, srcaddress = parse_url(src)
+        dstscheme, dstaddress = parse_url(dst)
         
         # check that the uris both point to the same location
         if srcscheme != dstscheme:
@@ -93,10 +93,10 @@ class FileLCopyResource(resource.PostableResource):
             recurse = bool(request.args['recurse'][0])
 
         if 'src' not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link must specify a directory 'target' to link to\n")
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "lcopy must specify a directory 'src' to copy from\n")
         
         if 'dst' not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link must specify a directory 'link' parameter\n")
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "lcopy must specify a directory 'dst' parameter to copy to\n")
                 
         srcuri = request.args['src'][0]
         dsturi = request.args['dst'][0]
@@ -118,7 +118,7 @@ class FileLCopyResource(resource.PostableResource):
         def do_lcopy():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                copyer=self.lcopy(hostname,src=srcuri,dst=dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
+                copyer=self.lcopy(srcuri,dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()

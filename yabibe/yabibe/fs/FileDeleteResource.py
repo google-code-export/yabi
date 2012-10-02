@@ -65,7 +65,7 @@ class FileDeleteResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
-    def delete(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
+    def rm(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
         scheme, address = parse_url(uri)
         bendname = scheme
         username = address.username
@@ -109,13 +109,6 @@ class FileDeleteResource(resource.PostableResource):
         
         recurse = 'recurse' in request.args
         
-        # get the backend
-        fsresource = self.fsresource()
-        if bendname not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%bendname)
-            
-        bend = fsresource.GetBackend(bendname)
-        
         # our client channel
         client_channel = defer.Deferred()
         
@@ -124,7 +117,7 @@ class FileDeleteResource(resource.PostableResource):
                 print "DO_RM hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
             try:
                 # if delete function is not disabled (for DEBUG purposes)
-                deleter=self.rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+                deleter=self.rm(uri,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()

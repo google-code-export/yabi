@@ -69,7 +69,25 @@ class FilePutResource(resource.PostableResource):
     def render(self, request):
         # break our request path into parts
         return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "request must be POST\n")
-                        
+    
+    def put(self,stream,uri,yabiusername=None, creds=None):
+        """stream reads from a open file stream to a backend uri"""
+        bendname = scheme
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        # get the backend
+        fsresource = self.fsresource()
+        if bendname not in fsresource.Backends():
+            raise Exception "Backend '%s' not found\n"%bendname
+            
+        bend = self.fsresource().GetBackend(scheme)
+        
+        # just return (procproto, fifo) for now
+        return bend.GetWriteFifo(hostname,username,path,port,filename, yabiusername=yabiusername,creds=creds, priority=priority)
+    
     @hmac_authenticated
     def http_POST(self, request):
         # override default priority

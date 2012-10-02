@@ -66,6 +66,28 @@ class FileGetResource(resource.PostableResource):
             raise Exception, "FileGetResource must be informed on construction as to which FSResource is its parent"
         
         self.fsresource = weakref.ref(fsresource)
+    
+    def get(self,uri, yabiusername=None, creds={}, priority=0):
+        scheme, address = parse_url(uri)
+        if not hasattr(address,"username"):
+            raise Exception, "No username provided in uri"
+        
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        basepath, filename = os.path.split(path)
+        
+        # get the backend
+        fsresource = self.fsresource()
+        if scheme not in fsresource.Backends():
+            raise Exception, "Backend '%s' not found\n"%scheme
+            
+        bend = self.fsresource().GetBackend(scheme)
+        
+        # returns ( procproto object, fifo filename )
+        return bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds)
         
     def handle_get(self, uri, bytes=None, **kwargs):
         creds = {}
@@ -88,32 +110,13 @@ class FileGetResource(resource.PostableResource):
         else:
             yabiusername = kwargs['yabiusername']
         
-        scheme, address = parse_url(uri)
-        if not hasattr(address,"username"):
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
-        
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
-        
-        basepath, filename = os.path.split(path)
-        
-        # get the backend
-        fsresource = self.fsresource()
-        if scheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%scheme)
-            
-        bend = self.fsresource().GetBackend(scheme)
-        
         # our client channel
         client_channel = defer.Deferred()
         
         def download_tasklet(channel):
             """Tasklet to do file download"""
             try:
-                print "TRY"
-                procproto, fifo = bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds)
+                procproto, fifo = self.get(uri,yabiusername=yabiusername,creds=creds,priority=0)
                 
                 def fifo_cleanup(response):
                     os.unlink(fifo)
@@ -123,6 +126,9 @@ class FileGetResource(resource.PostableResource):
             except NoCredentials, nc:
                 print traceback.format_exc()
                 return channel.callback(http.Response( responsecode.UNAUTHORIZED, {'content-type': http_headers.MimeType('text', 'plain')}, str(nc) ))
+            except Exception, exc:
+                print traceback.format_exc()
+                return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(exc) ))
             
             # give the engine a chance to fire up the process
             while not procproto.isStarted():
