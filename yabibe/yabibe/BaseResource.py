@@ -74,8 +74,8 @@ class BaseResource(resource.PostableResource):
         ##
         ## our handlers
         ##
-        self.child_fs = FSResource()
-        self.child_exec = ExecResource()
+        self.fs = self.child_fs = FSResource()
+        self.ex = self.child_exec = ExecResource()
         
         #  debug for taskmanager
         self.child_debug = TaskManagerResource()
@@ -106,3 +106,5 @@ class BaseResource(resource.PostableResource):
     def startup(self):
         """startup each backend that needs it"""
         self.child_exec.startup()
+
+base = BaseResource()

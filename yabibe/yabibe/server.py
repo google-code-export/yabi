@@ -63,7 +63,7 @@ from twisted.python import util, syslog
 # for SSL context
 from OpenSSL import SSL
 
-from BaseResource import BaseResource
+from BaseResource import base
 
 # make sure our env is sane
 #assert "GLOBUS_LOCATION" in os.environ
@@ -84,9 +84,6 @@ if "--syslog" in sys.argv:
 
     # log to syslog
     application.setComponent(ILogObserver, syslog.SyslogObserver(prefix=SYSLOG_PREFIX, facility=SYSLOG_FACILITY).emit)
-
-# Create the resource we will be serving
-base = BaseResource()
 
 # Setup default common access logging
 res = log.LogWrapperResource(base)

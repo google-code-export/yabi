@@ -58,29 +58,6 @@ class FileLinkResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
         
-    def link(self, target, link, yabiusername=None, creds={}, priority=0):
-        targetscheme, targetaddress = parse_url(target)
-        linkscheme, linkaddress = parse_url(link)
-        
-        # sanity checks
-        if targetscheme != linkscheme:
-            raise Exception, "scheme of target and link must be the same"
-        
-        for part in ['username','hostname','port']:
-            t = getattr(targetaddress,part)
-            l = getattr(linkaddress,part)
-            if t != l:
-                raise Exception, "link and target %s must be the same\n"%part
-            
-        username = targetaddress.username
-        hostname = targetaddress.hostname
-        port = targetaddress.port
-        
-        fsresource = self.fsresource()
-        bend = fsresource.GetBackend(targetscheme)
-        
-        return bend.ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
-        
     @hmac_authenticated
     def handle_link_request(self, request):
         # override default priority
@@ -114,7 +91,7 @@ class FileLinkResource(resource.PostableResource):
         def do_ln():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                linker=self.link(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
+                linker=self.fsresource().link(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()

@@ -58,23 +58,6 @@ class FileMkdirResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
-    def mkdir(self, uri, yabiusername=None, creds={}, priority=0):
-        """This is a call for an inner coroutine. This basically works out from the uri what backend is in action,
-        and calls the relevant mkdir. Exceptions bubble out of this. For REST action, you need to catch the return/exceptions
-        and make the relevant http callbacks
-        """
-        scheme, address = parse_url(uri)
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
-        
-        fsresource = self.fsresource()
-        if scheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%scheme)
-            
-        return fsresource.GetBackend(scheme).mkdir(hostname,path=path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
-        
     @hmac_authenticated
     def handle_mkdir_request(self, request):
         # override default priority
@@ -101,7 +84,7 @@ class FileMkdirResource(resource.PostableResource):
         def do_mkdir():
             #print "hostname=",hostname,"path=",path,"username=",username
             try:
-                self.mkdir(uri, yabiusername, creds, priority)
+                self.fsresource().mkdir(uri, yabiusername, creds, priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()

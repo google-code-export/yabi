@@ -81,7 +81,7 @@ class FilePutResource(resource.PostableResource):
         # get the backend
         fsresource = self.fsresource()
         if bendname not in fsresource.Backends():
-            raise Exception "Backend '%s' not found\n"%bendname
+            raise Exception, "Backend '%s' not found\n"%bendname
             
         bend = self.fsresource().GetBackend(scheme)
         

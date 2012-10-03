@@ -34,8 +34,6 @@ import pickle
 
 from utils.parsers import parse_url
 
-from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
-
 import traceback
 from Exceptions import BlockingException
 
@@ -72,6 +70,7 @@ class Task(object):
         self.stage = stage
         
     def setup_lambdas(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
         # shortcuts for our status and log calls
         self.status = lambda x: Status(self.statusurl,x)
         self.log = lambda x: Log(self.errorurl,x)
@@ -97,6 +96,7 @@ class Task(object):
             setattr(self,key,data[key])
     
     def run(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
         try:
             self.main()
         except BlockingException, be:
@@ -200,6 +200,8 @@ class NullBackendTask(Task):
             self._end_stage()
 
     def make_stageout(self):
+        from TaskTools import Mkdir
+
         stageout = self.json['stageout']
         
         if DEBUG:
@@ -210,6 +212,8 @@ class NullBackendTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
         
     def stage_in_files(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         dst = self.json['stageout']
         status = self.status
         log = self.log
@@ -388,6 +392,8 @@ class MainTask(Task):
             self._end_stage()
         
     def stage_in_files(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         task = self.json
         for copy in task['stagein']:
             src = copy['src']
@@ -449,6 +455,8 @@ class MainTask(Task):
                 
         
     def mkdir(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         task=self.json
         
         # get our credential working directory. We lookup the execution backends auth proxy cache, and get the users home directory from that
@@ -482,6 +490,8 @@ class MainTask(Task):
         return outputuri,outputdir
         
     def make_stageout(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         stageout = self.json['stageout']
         
         if DEBUG:
@@ -492,6 +502,8 @@ class MainTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
     
     def do(self, outputdir, callfunc):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         task=self.json
         retry=True
         while retry:
@@ -569,13 +581,17 @@ class MainTask(Task):
             gevent.sleep(1.0)
         
     def execute(self, outputdir):
+        from TaskTools import  Exec
         return self.do(outputdir, Exec)
 
     def resume(self, outputdir):
         # curry resume into the do method
+        from TaskTools import Resume
         return self.do(outputdir, lambda *x, **y: Resume( self._jobid, *x, **y))
         
     def stageout(self,outputuri):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         task=self.json
         if DEBUG:
             print "STAGEOUT:",task['stageout'],"METHOD:",task['stageout_method']
@@ -632,6 +648,8 @@ class MainTask(Task):
             raise TaskFailed("Unsupported stageout method %s"%task['stageout_method'])
             
     def cleanup(self):
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+
         task=self.json
         # cleanup working dir
         for copy in self.json['stagein']:

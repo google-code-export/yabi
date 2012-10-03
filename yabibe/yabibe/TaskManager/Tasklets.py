@@ -32,8 +32,6 @@ import os
 import dircache
 import gevent
 
-from TaskTools import CloseConnections
-
 class FileVersionMismatch(Exception): pass
 
 class Tasklets(object):
