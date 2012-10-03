@@ -100,6 +100,39 @@ def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
         Sleep(delay_gen.next())                   
     
     raise CopyError(data)
+
+#def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
+    #delay_gen = retry_delay_generator()
+    #if DEBUG:
+        #print "Copying %s to %s"%(src,dst)
+    #if 'priority' not in kwargs:
+        #kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
+    #for num in range(retry):
+        #if num and log_callback:
+            #log_callback("Retrying copy call. Attempt #%d"%(num+1))
+        #try:
+            #pass
+        
+            
+            
+            #if DEBUG:
+                #print "code=",repr(code)
+            #if int(code)==200:
+                ## success!
+                #return True
+            #else:
+                ##print "FAIL"
+                #if log_callback:
+                    #log_callback("Copy %s to %s failed with %d:%s"%(src,dst,code,message))
+                
+        #except GETFailure, err:
+            #print "Warning: copy failed with error:",err
+            #if log_callback:
+                #log_callback("Warning: copy failed with error: %s"%(err))
+            
+        #Sleep(delay_gen.next())                   
+    
+    #raise CopyError(data)
     
 def RCopy(src, dst, log_callback=None, **kwargs):
     #print "RCopying %s to %s"%(src,dst)
@@ -135,23 +168,26 @@ def List(path,recurse=False, **kwargs):
     return json.loads(data)
 
 def Mkdir(path, **kwargs):
+    from BaseResource import base                               # needs to be imported at runtime to ensure decoupling from import order
+
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
 
-    return GET(MKDIR_PATH,uri=path, **kwargs)
+    return base.fs.mkdir(path, **kwargs)
+    #return GET(MKDIR_PATH,uri=path, **kwargs)
 
 def Rm(path, recurse=False, **kwargs):
+    from BaseResource import base
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
 
-    code, message, data = GET(RM_PATH,uri=path,recurse=recurse, **kwargs)
-    assert code==200
-    return data
+    return base.fs.rm(uri=path,recurse=recurse, **kwargs)
     
 class LinkError(Exception): pass
     
 def Ln(target,link,retry=LINK_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
+    from BaseResource import base
     delay_gen = retry_delay_generator()
     if DEBUG:
         print "linking %s from %s"%(target,link)
@@ -161,16 +197,9 @@ def Ln(target,link,retry=LINK_RETRY, log_callback=None, **kwargs):
         if num and log_callback:
             log_callback("Retrying Ln call. Attempt #%d"%(num+1))
         try:
-            code,message,data = GET(LINK_PATH,target=target,link=link, **kwargs)
-            if DEBUG:
-                print "code=",repr(code)
-            if int(code)==200:
-                return True
-            else:
-                if log_callback:
-                    log_callback("Ln %s to %s failed with %d:%s"%(link,target,code,message))
-
-        except GETFailure, err:
+            return base.fs.link(target=target,link=link, **kwargs)
+            
+        except Exception, err:
             print "Warning: Post failed with error:",err
             if log_callback:
                 log_callback("Ln %s to %s failed with error: %s"%(link,target,err))
@@ -181,6 +210,7 @@ def Ln(target,link,retry=LINK_RETRY, log_callback=None, **kwargs):
 
 def LCopy(src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
+    from BaseResource import base
     delay_gen = retry_delay_generator()
     if DEBUG:
         print "Local-Copying %s to %s"%(src,dst)
@@ -190,18 +220,8 @@ def LCopy(src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
         if num and log_callback:
             log_callback("Retrying Lcopy call. Attempt #%d"%(num+1))
         try:
-            code,message,data = GET(LCOPY_PATH,src=src,dst=dst, **kwargs)
-            if DEBUG:
-                print "code=",repr(code)
-            if int(code)==200:
-                # success!
-                #print "SUCC"
-                return True
-            else:
-                if log_callback:
-                    log_callback("Lcopy %s to %s failed with %d:%s"%(src,dst,code,message))
-                
-        except GETFailure, err:
+            return base.fs.lcopy(src=src,dst=dst, **kwargs)
+        except Exception, err:
             print "Warning: Post failed with error:",err
             if log_callback:
                 log_callback("Lcopy %s to %s failed with error: %s"%(src,dst,err)) 

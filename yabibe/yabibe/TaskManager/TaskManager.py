@@ -36,7 +36,7 @@ import pickle
 
 from utils.parsers import parse_url
 
-from TaskTools import Copy, RCopy, Sleep, Log, Status, Exec, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+from utils.geventtools import sleep
 
 # if debug is on, full tracebacks are logged into yabiadmin
 DEBUG = False
@@ -95,19 +95,19 @@ class TaskManager(object):
         """The green task that starts up jobs"""
         while self.running:                 # do until we stop
             while waitForDeferred(self.get_next_task()):
-                Sleep(self.JOB_PAUSE)
+                sleep(self.JOB_PAUSE)
             
             # wait for this task to start or fail
-            Sleep(self.JOBLESS_PAUSE)
+            sleep(self.JOBLESS_PAUSE)
                         
     def unblocker(self):
         """green task that checks for blocked jobs that need unblocking"""
         while self.running:
             while waitForDeferred(self.get_next_unblocked()):
-                Sleep(self.JOB_PAUSE)
+                sleep(self.JOB_PAUSE)
             
             # wait for this task to start or fail
-            Sleep(self.JOBLESS_PAUSE)
+            sleep(self.JOBLESS_PAUSE)
         
     def start_task(self, data):
         try:
@@ -244,3 +244,4 @@ class TaskManager(object):
         d = factory.deferred.addCallback(self.start_unblock).addErrback(_doFailure)
         return d
         
+Tasks = TaskManager()

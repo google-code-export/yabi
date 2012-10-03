@@ -65,23 +65,6 @@ class FileDeleteResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
-    def rm(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
-        scheme, address = parse_url(uri)
-        bendname = scheme
-        username = address.username
-        path = address.path
-        hostname = address.hostname
-        port = address.port
-        
-        fsresource = self.fsresource()
-        if bendname not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%bendname)
-            
-        bend = fsresource.GetBackend(bendname)
-        
-        if not DISABLED:
-            return bend.rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
-        
     @hmac_authenticated
     def handle_delete_request(self, request):
         # override default priority
@@ -117,7 +100,7 @@ class FileDeleteResource(resource.PostableResource):
                 print "DO_RM hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
             try:
                 # if delete function is not disabled (for DEBUG purposes)
-                deleter=self.rm(uri,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+                deleter=self.fsresource().rm(uri,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()

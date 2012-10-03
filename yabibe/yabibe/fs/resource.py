@@ -46,6 +46,9 @@ from FileCompressGetResource import FileCompressGetResource
 from FileCompressPutResource import FileCompressPutResource
 
 from utils.BackendResource import BackendResource
+from utils.parsers import parse_url
+
+RM_DISABLED = False
 
 class FSResource(resource.Resource, BackendResource):
     """This is the resource that connects to all the filesystem backends"""
@@ -120,3 +123,81 @@ class FSResource(resource.Resource, BackendResource):
             return FileCompressPutResource(request, segments, fsresource=self), segments[1:]
         
         return resource.Resource.locateChild(self,request,segments)
+        
+    #
+    # generic fs functions
+    #
+    def mkdir(self, uri, yabiusername=None, creds={}, priority=0):
+        """This is a call for an inner coroutine. This basically works out from the uri what backend is in action,
+        and calls the relevant mkdir. Exceptions bubble out of this. For REST action, you need to catch the return/exceptions
+        and make the relevant http callbacks
+        """
+        scheme, address = parse_url(uri)
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        if scheme not in self.backends:
+            raise Exception, "Backend '%s' not found\n"%scheme
+            
+        return self.GetBackend(scheme).mkdir(hostname,path=path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+
+    def rm(self, uri, recurse=False, yabiusername=None, creds={}, priority=0):
+        scheme, address = parse_url(uri)
+        bendname = scheme
+        username = address.username
+        path = address.path
+        hostname = address.hostname
+        port = address.port
+        
+        if scheme not in self.backends:
+            raise Exception, "Backend '%s' not found\n"%scheme
+            
+        if not RM_DISABLED:
+            return self.GetBackend(scheme).rm(hostname,path=path, port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+        
+    def link(self, target, link, yabiusername=None, creds={}, priority=0):
+        targetscheme, targetaddress = parse_url(target)
+        linkscheme, linkaddress = parse_url(link)
+        
+        # sanity checks
+        if targetscheme != linkscheme:
+            raise Exception, "scheme of target and link must be the same"
+        
+        for part in ['username','hostname','port']:
+            t = getattr(targetaddress,part)
+            l = getattr(linkaddress,part)
+            if t != l:
+                raise Exception, "link and target %s must be the same\n"%part
+            
+        username = targetaddress.username
+        hostname = targetaddress.hostname
+        port = targetaddress.port
+        
+        if scheme not in self.backends:
+            raise Exception, "Backend '%s' not found\n"%scheme
+        
+        return self.GetBackend(scheme).ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+
+    def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
+        srcscheme, srcaddress = parse_url(src)
+        dstscheme, dstaddress = parse_url(dst)
+        
+        # check that the uris both point to the same location
+        if srcscheme != dstscheme:
+            raise Exception, "dst and src schemes must be the same"
+        for part in ['username','hostname','port']:
+            s = getattr(srcaddress,part)
+            d = getattr(dstaddress,part)
+            if s != d:
+                raise Exception, "dst and src %s must be the same\n"%part
+            
+        username = srcaddress.username
+        hostname = srcaddress.hostname
+        port = srcaddress.port
+        
+        if srcscheme not in self.backends:
+            raise Exception, "Backend '%s' not found\n"%scheme
+        
+        return self.GetBackend(srcscheme).cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)

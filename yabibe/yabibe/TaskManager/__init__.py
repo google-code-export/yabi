@@ -27,9 +27,7 @@
 ### END COPYRIGHT ###
 # -*- coding: utf-8 -*-
 
-import TaskManager
-
-Tasks = TaskManager.TaskManager()
+from TaskManager import Tasks
 
 from Tasklets import tasklets
 

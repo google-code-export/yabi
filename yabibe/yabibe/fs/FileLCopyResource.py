@@ -58,31 +58,6 @@ class FileLCopyResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
 
-    def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
-        srcscheme, srcaddress = parse_url(src)
-        dstscheme, dstaddress = parse_url(dst)
-        
-        # check that the uris both point to the same location
-        if srcscheme != dstscheme:
-            raise Exception, "dst and src schemes must be the same"
-        for part in ['username','hostname','port']:
-            s = getattr(srcaddress,part)
-            d = getattr(dstaddress,part)
-            if s != d:
-                raise Exception, "dst and src %s must be the same\n"%part
-            
-        username = srcaddress.username
-        hostname = srcaddress.hostname
-        port = srcaddress.port
-        
-        fsresource = self.fsresource()
-        if srcscheme not in fsresource.Backends():
-            raise Exception, "Backend '%s' not found\n"%srcscheme
-            
-        bend = fsresource.GetBackend(srcscheme)
-        
-        return bend.cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
-
     @hmac_authenticated
     def handle_lcopy_request(self, request):
         # override default priority
@@ -118,7 +93,7 @@ class FileLCopyResource(resource.PostableResource):
         def do_lcopy():
             #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                copyer=self.lcopy(srcuri,dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
+                copyer=self.fsresource().lcopy(srcuri,dsturi,recurse=recurse,yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
             except BlockingException, be:
                 print traceback.format_exc()
