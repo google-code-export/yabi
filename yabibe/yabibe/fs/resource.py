@@ -175,8 +175,8 @@ class FSResource(resource.Resource, BackendResource):
         hostname = targetaddress.hostname
         port = targetaddress.port
         
-        if scheme not in self.backends:
-            raise Exception, "Backend '%s' not found\n"%scheme
+        if linkscheme not in self.backends:
+            raise Exception, "Backend '%s' not found\n"%linkscheme
         
         return self.GetBackend(scheme).ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
 
@@ -198,6 +198,6 @@ class FSResource(resource.Resource, BackendResource):
         port = srcaddress.port
         
         if srcscheme not in self.backends:
-            raise Exception, "Backend '%s' not found\n"%scheme
+            raise Exception, "Backend '%s' not found\n"%srcscheme
         
         return self.GetBackend(srcscheme).cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)

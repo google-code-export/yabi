@@ -29,3 +29,19 @@ def make_script(template,working,command,modules,cpus,memory,walltime,yabiuserna
     }
     
     return str(tmpl.render(**variables))
+    
+class Submission(object):
+    """Handle the rendering and holding of a submission script"""
+    
+    def __init__(self, submission):
+        self.submission = submission
+        self.cleaned_template = template.replace('\r\n','\n').replace('\n\r','\n').replace('\r','\n')
+        self.template = Template(cleaned_template)
+    
+    def render(self, kwargs=None):
+        """call with kwargs to render the result,
+        Call with no argument to return last rendered result (or exception if its never been rendered"""
+        if kwargs is not None:
+            self.rendered = str( self.template.render(**kwargs) )
+        return self.rendered
+        

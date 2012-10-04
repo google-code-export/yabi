@@ -453,4 +453,28 @@ class SSHSGEConnector(ExecConnector, ssh.KeyStore.KeyStore):
                 #print "CLOSING STREAM"
                 client_stream.finish()
                 return        
- 
+
+    def new_run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
+        modules = [] if not module else [X.strip() for X in module.split(",")]
+        
+        # send a state
+        send_state("Unsubmitted")
+        
+        # make the submission object
+        sub = Submission( submission )
+        sub.render(submission_keys)
+        
+        # this should handle the transport, retries, qsub failures etc.
+        jobid = self.submit( sub )
+        
+        # now the job is submitted, lets remember it
+        self.add_running(jobid, {'username':username})
+        
+        # lets report our id to the caller
+        send_id(jobid)
+        
+        self.main_loop()
+        
+        # delete finished job
+        self.del_running(jobid)
+

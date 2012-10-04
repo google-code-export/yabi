@@ -72,6 +72,7 @@ class FilePutResource(resource.PostableResource):
     
     def put(self,stream,uri,yabiusername=None, creds=None):
         """stream reads from a open file stream to a backend uri"""
+        scheme, address = parse_url(uri)
         bendname = scheme
         username = address.username
         path = address.path
