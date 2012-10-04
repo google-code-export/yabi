@@ -50,60 +50,40 @@ import tempfile
 from utils.geventtools import sleep
 
 from conf import config
-from SubmissionTemplate import make_script
+from SubmissionTemplate import make_script, Submission
 
 from twisted.internet import protocol
 from twisted.internet import reactor
 
-class BaseShellProcessProtocol(protocol.ProcessProtocol):
-    def __init__(self, stdin=None):
+class LocalExecutionProcessProtocol(protocol.ProcessProtocol):
+    unify_line_endings=True
+    
+    def __init__(self, stdin=None, stdout=None, stderr=None, cleanup=None):
         self.stdin=stdin
-        self.err = ""
-        self.out = ""
+        self.stderr = stderr
+        self.stdout = stdout
         self.exitcode = None
-        
+        self.cleanup = cleanup              # if we need to run a cleanup closure post execution
+        self.pid = None
+                
     def connectionMade(self):
         # when the process finally spawns, close stdin, to indicate we have nothing to say to it
         if self.stdin:
             self.transport.write(self.stdin)
         self.transport.closeStdin()
-        
+        self.started = True
+        self.pid = self.transport.pid
+                
     def outReceived(self, data):
-        self.out += data
-        if DEBUG:
-            print "OUT:",data
+        self.stdout.write(data.replace("\r\n","\n") if self.unify_line_endings else data )
         
     def errReceived(self, data):
-        self.err += data
-        if DEBUG:
-            print "ERR:",data
+        self.stderr.write(data.replace("\r\n","\n") if self.unify_line_endings else data )
     
-    def outConnectionLost(self):
-        # stdout was closed. this will be our endpoint reference
-        if DEBUG:
-            print "Out lost"
-        self.unifyLineEndings()
-        
-    def inConenctionLost(self):
-        if DEBUG:
-            print "In lost"
-        self.unifyLineEndings()
-        
-    def errConnectionLost(self):
-        if DEBUG:
-            print "Err lost"
-        self.unifyLineEndings()
-        
     def processEnded(self, status_object):
+        if self.cleanup:
+            self.cleanup()
         self.exitcode = status_object.value.exitCode
-        if DEBUG:
-            print "proc ended",self.exitcode
-        self.unifyLineEndings()
-        
-    def unifyLineEndings(self):
-        # try to unify the line endings to \n
-        self.out = self.out.replace("\r\n","\n")
-        self.err = self.err.replace("\r\n","\n")
         
     def isDone(self):
         return self.exitcode != None
@@ -111,7 +91,11 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
     def isFailed(self):
         return self.isDone() and self.exitcode != 0
         
-class BaseShell(object):
+    def isStarted(self):
+        return self.started
+    
+        
+class LocalExecutionShell(object):
     def __init__(self):
         pass
 
@@ -126,107 +110,109 @@ class BaseShell(object):
     def execute(self, pp, command, working):
         """execute a command using a process protocol"""
         
-        lexer = shlex.shlex(command, posix=True)
-        lexer.wordchars += r"-.:;/="
-        arguments = list(lexer)
-        
         subenv = self._make_env()
-        if DEBUG:
-            print "env",subenv
-            print "exec:",arguments
-            print  [pp,
-                                arguments[0],
-                                arguments,
-                                subenv,
-                                working]
-            
-            
-        reactor.spawnProcess(   pp,
-                                arguments[0],
-                                arguments,
+        subprocess = reactor.spawnProcess(   pp,
+                                command[0],
+                                command,
                                 env=subenv,
                                 path=working
                             )
-        return pp
+        return subprocess
 
-class LocalRun(BaseShell):
-    def run(self, certfile, remote_command="hostname", username="yabi", host="faramir.localdomain", working="/tmp", port="22", stdout="STDOUT.txt", stderr="STDERR.txt",password="",modules=[],streamin=None):
-        """Spawn a process to run a remote ssh job. return the process handler"""
-        subenv = self._make_env()
+class LocalRun(LocalExecutionShell):
+    def run(self,working, submission, submission_stdout, submission_stderr):
+        """spawn a local task.
+        run it in working directory 'working'
+        run submission script in a shell
+        write submission script stdout and stderr streams
+        """
         
-        if modules:
-            remote_command = "&&".join(["module load %s"%module for module in modules]+[remote_command])
+        # write submission script into tempfile
+        from conf import config
         
-        if DEBUG:
-            print "running local command:",remote_command
+        temp_fd, temp_fname = config.mktemp(".sh")
+        with open(temp_fname, 'w') as fh:
+            fh.write(submission.render())
         
-        return BaseShell.execute(self,BaseShellProcessProtocol(streamin),remote_command,working)
+        # write a little cleanup closure to pass to P.P.
+        def cleanup():
+            os.unlink(temp_fname)                                   # delete submission file on task end.
+        
+        pp = BaseShellProcessProtocol(stdout=submission_stdout,stderr=submission_stderr,cleanup=cleanup)
+        subprocess = self.execute(pp,["/bin/bash",temp_fname],working)
+        
+        return subprocess, pp
 
-class LocalConnector(ExecConnector):    
-    def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
-        # preprocess some stuff
-        modules = [] if not module else [X.strip() for X in module.split(",")]
+class StreamLogger(object):
+    """write() on this behaves like file stream but sends data via log callback
+    """
+    def __init__(callback):
+        self.callback = callback
         
-        client_stream = stream.ProducerStream()
-        channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, stream = client_stream ))
-        gevent.sleep()
+    def write(string):
+        self.callback(string)
+
+class LocalConnector(ExecConnector):
+    delay = 1.0
+    
+    #"command":command,
+                    #"working":working,
+                    #"stdout":stdout,
+                    #"stderr":stderr,
+                    #"walltime":walltime,
+                    #"memory":memory,
+                    #"cpus":cpus,
+                    #"queue":queue,
+                    #"jobtype":jobtype, 
+                    #"modules":modules,
+                    #"tasknum":tasknum,
+                    #"tasktotal":tasktotal
+    
+    #def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
+    def run(self, yabiusername, command, working, submission, submission_data, state, jobid, info, log):
+        """runs a command through the Local execution backend. Callbacks for status/logging.
         
+        state: callback to set task state
+        jobid: callback to set jobid/taskid/processid
+        info: callback to set key/value info
+        log: callback for log messages to go to admin
+        """
         try:
-            if DEBUG:
-                print "LOCAL",command,"WORKING:",working,"CREDS passed in:%s"%(creds)    
-            client_stream.write("Unsubmitted\r\n")
-            gevent.sleep(1.0)
+            state("Unsubmitted")
+            gevent.sleep(self.delay)
+            state("Pending")
+            gevent.sleep(self.delay)
             
-            client_stream.write("Pending\r\n")
-            gevent.sleep(1.0)
+            sub = Submission(submission)
+            sub.render(submission_data)
             
-            script_string = make_script(submission,working,command,modules,cpus,memory,walltime,yabiusername,username,host,queue, stdout, stderr,tasknum,tasktotal)    
+            outstream = StreamLogger(lambda x: log("sub out:"+x))
+            errstream = StreamLogger(lambda x: log("sub err:"+x))
             
-            if DEBUG:
-                print "command:",command
-                print "username:",username
-                print "host:",host
-                print "working:",working
-                print "port:","22"
-                print "stdout:",stdout
-                print "stderr:",stderr
-                print "modules:",modules
-                print "submission script:",submission
-                print "script string:",script_string
+            log("rendered submission script is:\n"+sub.render())
+            
+            subprocess, pp = LocalRun().run(working, sub, out=outstream, err=errstream)
+            state("Running")
+            gevent.sleep(self.delay)
+        
+            # wait for task to start then store its process id
+            while not pp.isStarted():
+                gevent.sleep(self.delay)
                 
-            pp = LocalRun().run(None,command,username,host,working,port="22",stdout=stdout,stderr=stderr,password=None, modules=modules)
-            client_stream.write("Running\r\n")
-            gevent.sleep(1.0)
-            
+            # get pid and log it
+            jobid(str(pp.pid))
+        
             while not pp.isDone():
-                gevent.sleep()
-                
-            # write out stdout and stderr.
-            # TODO: make this streaming
-            with open(os.path.join(working,stdout),'w') as fh:
-                fh.write(pp.out)
-            with open(os.path.join(working,stderr),'w') as fh:
-                fh.write(pp.err)
-                
+                gevent.sleep(self.delay)
+            
             if pp.exitcode==0:
                 # success
-                client_stream.write("Done\r\n")
-                client_stream.finish()
+                state("Done")
                 return
                 
-            # error
-            if DEBUG:
-                print "SSH Job error:"
-                print "OUT:",pp.out
-                print "ERR:",pp.err
-            client_stream.write("Error\r\n")
-            client_stream.finish()
-            return
-                    
+            state("Error")               
         except Exception, ee:
             import traceback
             traceback.print_exc()
-            client_stream.write("Error\r\n")
-            client_stream.finish()
-            return
-        
+            state("Error")
+       

@@ -516,22 +516,14 @@ class MainTask(Task):
                 def _task_status_change(line):
                     """Each line that comes back from the webservice gets passed into this callback"""
                     line = line.strip()
-                    if DEBUG:
-                        print "_task_status_change(",line,")"
                     self.log("Remote execution backend sent status message: %s"%(line))
+                    status = line.lower()
+                    self.exec_status.append(status)
+                    self.status("exec:%s"%(status))
                     
+                def _task_id_change(value):
                     # check for job id number
-                    if line.startswith("id") and '=' in line:
-                        key,value = line.split("=")
-                        value = value.strip()
-                        
-                        #print "execution job given ID:",value
-                        self._jobid = value
-                        #self.remote_id(value)                           # TODO:send this id back to the middleware
-                    else:
-                        status = line.lower()
-                        self.exec_status.append(status)
-                        self.status("exec:%s"%(status))
+                    self._jobid = value
                 
                 # submit the job to the execution middle ware
                 self.log("Submitting to %s command: %s"%(task['exec']['backend'],task['exec']['command']))
@@ -546,8 +538,17 @@ class MainTask(Task):
                         if key in task['exec'] and task['exec'][key]:
                             extras[key]=task['exec'][key]
                     
+                    submission_data = {
+                        'command':task['exec']['command'],
+                        'stdout':'STDOUT.txt',
+                        'stderr':'STDERR.txt'
+                    }
+                    submission_data.apply(extras)
+                    
                     #print "callfunc is",callfunc
-                    callfunc(uri, command=task['exec']['command'], remote_info=task['remoteinfourl'], submission=self.submission, stdout="STDOUT.txt",stderr="STDERR.txt", callbackfunc=_task_status_change, yabiusername=self.yabiusername, **extras)     # this blocks untill the command is complete. or the execution errored
+                    #callfunc(uri, command=task['exec']['command'], remote_info=task['remoteinfourl'], submission=self.submission, stdout="STDOUT.txt",stderr="STDERR.txt", callbackfunc=_task_status_change, yabiusername=self.yabiusername, **extras)     # this blocks untill the command is complete. or the execution errored
+                    callfunc(uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change)
+                    
                     unfinished = set(("pending", "unsubmitted", "running"))
                     received_so_far = set(self.exec_status)
                     # Loop while all statuses received so far are unfinished

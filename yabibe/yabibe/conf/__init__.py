@@ -43,6 +43,7 @@ import StringIO
 
 import urlparse
 import re
+import tempfile
 re_url_schema = re.compile(r'\w+')
 
 import syslog
@@ -146,7 +147,7 @@ class Configuration(object):
                         "keyfile":"~/.yabi/servercert.pem",
                         
                         "hmackey":None,
-                                                
+                        
                         "admin":None,
                         "admin_cert_check":True,
                         
@@ -325,5 +326,10 @@ class Configuration(object):
             ips[ip] = ipstore
             
         return ips
+        
+    def mktemp(suffix,prefix='tmp'):
+        """Make a unique filename in the tempfile area and return its filename"""
+        tempdir = self.config['backend']['temp']
+        return tempfile.mkstemp(suffix,prefix,dir=tempdir)
     
 config = Configuration()
