@@ -97,7 +97,7 @@ class LocalExecutionProcessProtocol(protocol.ProcessProtocol):
         
 class LocalExecutionShell(object):
     def __init__(self):
-        pass
+        self.subenv={}
 
     def _make_path(self):
         return "/usr/bin"    
@@ -110,7 +110,7 @@ class LocalExecutionShell(object):
     def execute(self, pp, command, working):
         """execute a command using a process protocol"""
         
-        subenv = self._make_env()
+        self.subenv = subenv = self._make_env()
         subprocess = reactor.spawnProcess(   pp,
                                 command[0],
                                 command,
@@ -138,7 +138,7 @@ class LocalRun(LocalExecutionShell):
         def cleanup():
             os.unlink(temp_fname)                                   # delete submission file on task end.
         
-        pp = BaseShellProcessProtocol(stdout=submission_stdout,stderr=submission_stderr,cleanup=cleanup)
+        pp = LocalExecutionProcessProtocol(stdout=submission_stdout,stderr=submission_stderr,cleanup=cleanup)
         subprocess = self.execute(pp,["/bin/bash",temp_fname],working)
         
         return subprocess, pp
@@ -146,10 +146,10 @@ class LocalRun(LocalExecutionShell):
 class StreamLogger(object):
     """write() on this behaves like file stream but sends data via log callback
     """
-    def __init__(callback):
+    def __init__(self,callback):
         self.callback = callback
         
-    def write(string):
+    def write(self,string):
         self.callback(string)
 
 class LocalConnector(ExecConnector):
@@ -169,7 +169,7 @@ class LocalConnector(ExecConnector):
                     #"tasktotal":tasktotal
     
     #def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
-    def run(self, yabiusername, command, working, submission, submission_data, state, jobid, info, log):
+    def run(self, yabiusername, working, submission, submission_data, state, jobid, info, log):
         """runs a command through the Local execution backend. Callbacks for status/logging.
         
         state: callback to set task state
@@ -189,9 +189,13 @@ class LocalConnector(ExecConnector):
             outstream = StreamLogger(lambda x: log("sub out:"+x))
             errstream = StreamLogger(lambda x: log("sub err:"+x))
             
-            log("rendered submission script is:\n"+sub.render())
+            if len(sub.render().strip()):
+                log("rendered submission script is:\n"+sub.render())
+            else:
+                log("WARNING: submission template renders to an empty script. Nothing will run.")
             
-            subprocess, pp = LocalRun().run(working, sub, out=outstream, err=errstream)
+            localrun = LocalRun()
+            subprocess, pp = localrun.run(working, sub, submission_stdout=outstream, submission_stderr=errstream)
             state("Running")
             gevent.sleep(self.delay)
         
@@ -201,6 +205,9 @@ class LocalConnector(ExecConnector):
                 
             # get pid and log it
             jobid(str(pp.pid))
+            
+            # get env and info it
+            info(localrun.subenv)
         
             while not pp.isDone():
                 gevent.sleep(self.delay)

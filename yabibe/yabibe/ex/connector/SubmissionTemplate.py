@@ -35,8 +35,8 @@ class Submission(object):
     
     def __init__(self, submission):
         self.submission = submission
-        self.cleaned_template = template.replace('\r\n','\n').replace('\n\r','\n').replace('\r','\n')
-        self.template = Template(cleaned_template)
+        self.cleaned_template = submission.replace('\r\n','\n').replace('\n\r','\n').replace('\r','\n')
+        self.template = Template(self.cleaned_template)
     
     def render(self, kwargs=None):
         """call with kwargs to render the result,
