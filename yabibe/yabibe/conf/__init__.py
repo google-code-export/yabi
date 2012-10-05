@@ -327,7 +327,7 @@ class Configuration(object):
             
         return ips
         
-    def mktemp(suffix,prefix='tmp'):
+    def mktemp(self,suffix,prefix='tmp'):
         """Make a unique filename in the tempfile area and return its filename"""
         tempdir = self.config['backend']['temp']
         return tempfile.mkstemp(suffix,prefix,dir=tempdir)

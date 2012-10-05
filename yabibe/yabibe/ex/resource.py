@@ -84,7 +84,6 @@ class ExecResource(resource.Resource, BackendResource):
             return ExecResumeResource(request,segments,fsresource = self), []
         elif segments[0]=="info":
             return ExecInfoResource(request,segments,fsresource = self), []
-            
         
         return resource.Resource.locateChild(self,request,segments)
         
