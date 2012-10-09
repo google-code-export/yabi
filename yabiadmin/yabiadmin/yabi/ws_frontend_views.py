@@ -47,7 +47,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.contrib import auth
-from crypto import DecryptException
+from crypto_utils import DecryptException
 from django.views.decorators.cache import cache_page
 from django.views.decorators.vary import vary_on_cookie
 from django.core.cache import cache
@@ -417,6 +417,7 @@ def munge_name(user, workflow_name):
     return munged_name
  
 @authentication_required
+@cache_page(20)
 def get_workflow(request, workflow_id):
     yabiusername = request.user.username
     logger.debug(yabiusername)
