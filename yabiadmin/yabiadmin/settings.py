@@ -32,7 +32,7 @@ import djcelery
 import logging
 import logging.handlers
 
-PROJECT_DIRECTORY = os.environ.get('PROJECT_DIRECTORY', os.path.abspath('.'))
+PROJECT_DIRECTORY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # setting to control ccg ssl middleware
 # see http://code.google.com/p/ccg-django-extras/source/browse/
@@ -119,8 +119,9 @@ LOGOUT_URL = url('/logout/')
 ### static file management ###
 # see: https://docs.djangoproject.com/en/dev/howto/static-files/
 # deployment uses an apache alias
-STATICFILES_DIRS = [os.path.join(PROJECT_DIRECTORY,"static")]
+# STATICFILES_DIRS = [os.path.join(PROJECT_DIRECTORY,"static")]
 STATIC_URL = url('/static/')
+STATIC_ROOT = os.path.join(PROJECT_DIRECTORY,"static")
 ADMIN_MEDIA_PREFIX = url('/static/admin/')
 
 # media directories
@@ -130,7 +131,9 @@ MEDIA_URL = url('/static/media/')
 
 # a directory that will be writable by the webserver, for storing various files...
 WRITABLE_DIRECTORY = os.path.join(PROJECT_DIRECTORY,"scratch")
-
+if not os.path.exists(WRITABLE_DIRECTORY):
+    os.mkdir(WRITABLE_DIRECTORY)
+    
 # put our temporary uploads directory inside WRITABLE_DIRECTORY
 FILE_UPLOAD_TEMP_DIR = os.path.join(WRITABLE_DIRECTORY,".uploads")
 if not os.path.exists(FILE_UPLOAD_TEMP_DIR):
@@ -162,9 +165,9 @@ TEMPLATE_DEBUG = DEBUG
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#template-loaders
 TEMPLATE_LOADERS = [
-    'django.template.loaders.filesystem.Loader',
-    'django.template.loaders.app_directories.Loader',
-    'ccg.template.loaders.makoloader.filesystem.Loader'
+    #'django.template.loaders.filesystem.Loader',
+    'ccg.template.loaders.makoloader.filesystem.Loader',
+    'django.template.loaders.app_directories.Loader'
 ]
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#template-dirs
@@ -185,17 +188,29 @@ MAKO_MODULENAME_CALLABLE = ''
 # these are the settings you will most likely change to reflect your setup
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#databases
+#DATABASES = {
+    #'default': {
+        #'ENGINE': 'django.db.backends.sqlite3',
+        #'USER': '',
+        #'NAME': 'yabiadmin.sqlite3',
+        #'PASSWORD': '', 
+        #'HOST': '',                    
+        #'PORT': '',
+        #'OPTIONS': {
+            #'timeout': 20,
+        #}
+    #}
+#}
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'USER': '',
-        'NAME': 'yabiadmin.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'USER': 'root',
+        'NAME': 'dev_yabi',
         'PASSWORD': '', 
-        'HOST': '',                    
+        'HOST': 'localhost',                    
         'PORT': '',
-        'OPTIONS': {
-            'timeout': 20,
-        }
+        'OPTIONS': {}
     }
 }
 
@@ -262,7 +277,7 @@ BACKEND_PORT = '9001'
 BACKEND_BASE = '/'
 TASKTAG = 'set_this' # this must be the same in the yabi.conf for the backend that will consume tasks from this admin
 YABIBACKEND_SERVER = BACKEND_IP + ':' +  BACKEND_PORT
-YABISTORE_HOME = '.yabi/run/store/'
+YABISTORE_HOME = os.path.join(WRITABLE_DIRECTORY, 'store')
 
 YABIBACKEND_COPY = '/fs/copy'
 YABIBACKEND_RCOPY = '/fs/rcopy'
