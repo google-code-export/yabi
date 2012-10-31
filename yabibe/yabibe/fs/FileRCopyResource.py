@@ -103,7 +103,8 @@ class FileRCopyResource(resource.PostableResource):
         
             assert yabiusername, "You must pass in a yabiusername so I can go get a credential."
             
-            assert src.endswith('/'), "'src' path must end in a '/'"
+            #assert src.endswith('/'), "'src' path must end in a '/'"
+            
             if not dst.endswith('/'):
                 dst += '/'
             
