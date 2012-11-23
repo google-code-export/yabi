@@ -35,11 +35,8 @@ import json
 import traceback
 
 from Exceptions import PermissionDenied, InvalidPath, BlockingException, NoCredentials, AuthException, ProxyInitError
-
 from utils.parsers import parse_url
-
 from utils.submit_helpers import parsePOSTData
-
 from decorators import hmac_authenticated
 
 DEFAULT_LIST_PRIORITY = 0                   # immediate by default
@@ -65,7 +62,7 @@ class FileListResource(resource.PostableResource):
         # break our request path into parts
         return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "request must be GET\n")
     
-    @hmac_authenticated
+    #@hmac_authenticated
     def handle_list(self, request):
         if "uri" not in request.args:
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
@@ -149,9 +146,13 @@ class FileListResource(resource.PostableResource):
             return self.handle_list(request)
         
         deferred.addCallback(post_parsed)
-        deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
+        deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, res) )
         
         return deferred
 
     def http_GET(self, request):
-        return self.handle_list(request)
+        try:
+            return self.handle_list(request)
+        except Exception, e:
+            print traceback.format_exc()
+            return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))

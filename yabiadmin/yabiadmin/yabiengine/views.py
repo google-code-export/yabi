@@ -45,7 +45,7 @@ from yabiadmin.yabi.models import BackendCredential
 import logging
 logger = logging.getLogger(__name__)
 
-from constants import *
+from yabiadmin.constants import *
 from random import shuffle
 
 def request_next_task(request, status):
@@ -91,7 +91,7 @@ def request_next_task(request, status):
         if tasks_per_user==None or len(remote_tasks) < tasks_per_user:
             # we can return a task for this bec if one exists
             try:
-                tasks = [T for T in Task.objects.filter(execution_backend_credential=bec).filter(tasktag=tasktag) if T.status==status]
+                tasks = [T for T in Task.objects.filter(execution_backend_credential=bec).filter(tasktag=tasktag).filter(status_requested__isnull=True) if T.status==status]
                 
                 #logger.warning("FOUND %s: (%d tasks) %s"%(status,len(tasks),tasks))
                 
@@ -167,9 +167,9 @@ def update_task_status(task_id, status):
         def log_ignored():
             logger.warning('Ignoring status update of task %s from %s to %s' % (task.pk, task.status, status))
 
-        logger.warning("task: %d updating to: %s"%(task_id,status))
+        #logger.warning("task: %d updating to: %s"%(task_id,status))
 
-        logger.warning("task: %d updating.status to: %s"%(task_id,status))
+        #logger.warning("task: %d updating.status to: %s"%(task_id,status))
         #task.status = status
         kwargs = {Task.status_attr(status): datetime.now()}
         Task.objects.filter(id=task_id).update(**kwargs)
@@ -181,9 +181,9 @@ def update_task_status(task_id, status):
         if status == STATUS_COMPLETE:
             task.end_time = datetime.now()
         
-        logger.warning("task: %d updating to: %s presave"%(task_id,status))
+        #logger.warning("task: %d updating to: %s presave"%(task_id,status))
         task.save()
-        logger.warning("task: %d updating to: %s postsave"%(task_id,status))
+        #logger.warning("task: %d updating to: %s postsave"%(task_id,status))
        
         # We have to commit the task status before calculating
         # job status that is based on task statuses
@@ -193,9 +193,9 @@ def update_task_status(task_id, status):
         task.job.update_status()
         job_cur_status = task.job.status
 
-        logger.warning("task: %d updating to: %s precommit"%(task_id,status))
+        #logger.warning("task: %d updating to: %s precommit"%(task_id,status))
         transaction.commit()
-        logger.warning("task: %d updating to: %s postcommit"%(task_id,status))
+        #logger.warning("task: %d updating to: %s postcommit"%(task_id,status))
         
         if job_cur_status in [STATUS_READY, STATUS_COMPLETE, STATUS_ERROR]:
             workflow = EngineWorkflow.objects.get(pk=task.job.workflow.id)
