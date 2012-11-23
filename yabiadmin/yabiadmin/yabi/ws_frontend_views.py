@@ -32,7 +32,7 @@ import os
 import re
 
 from datetime import datetime, timedelta
-from urllib import quote
+from urllib import quote, unquote
 from urlparse import urlparse, urlunparse
 
 from django.db import transaction
@@ -47,7 +47,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.contrib import auth
-from crypto_utils import DecryptException
+from yabiadmin.crypto_utils import DecryptException
 from django.views.decorators.cache import cache_page
 from django.views.decorators.vary import vary_on_cookie
 from django.core.cache import cache
@@ -56,12 +56,12 @@ from yabiadmin.yabiengine import storehelper as StoreHelper
 from yabiadmin.yabiengine.tasks import build
 from yabiadmin.yabiengine.enginemodels import EngineWorkflow
 from yabiadmin.yabiengine.models import WorkflowTag
-from yabiadmin.yabiengine.backendhelper import get_listing, get_backend_list, get_file, get_fs_backendcredential_for_uri, copy_file, rcopy_file, rm_file
+from yabiadmin.yabiengine.backendhelper import get_listing, get_backend_list, get_file, zget_file, get_fs_backendcredential_for_uri, copy_file, rcopy_file, rm_file
 from yabiadmin.responses import *
 from yabiadmin.decorators import authentication_required, profile_required
 from yabiadmin.yabistoreapp import db
 from yabiadmin.utils import using_dev_settings
-from yabiengine.backendhelper import make_hmac
+from yabiadmin.yabiengine.backendhelper import make_hmac
 from yabiadmin.utils import cache_keyname
 from yaphc import Http, PostRequest, UnauthorizedError
 
@@ -232,14 +232,14 @@ def rcopy(request):
     yabiusername = request.user.username
         
     def closure():
-        src,dst = request.GET['src'],request.GET['dst']
+        src,dst = unquote(request.REQUEST['src']), unquote(request.REQUEST['dst'])
 
         # check that src does not match dst
         srcpath, srcfile = src.rstrip('/').rsplit('/', 1)
         assert srcpath != dst, "dst must not be the same as src"
         
         # src must be directory
-        assert src[-1]=='/', "src malformed. Not directory."
+        #assert src[-1]=='/', "src malformed. Not directory."
         # TODO: This needs to be fixed in the FRONTEND, by sending the right url through as destination. For now we just make sure it ends in a slash
         if dst[-1]!='/':
             dst += '/'
@@ -291,7 +291,7 @@ def get(request, bytes=None):
 
         response = HttpResponse(get_file(yabiusername, uri, bytes=bytes))
 
-        mimetypes.init([os.path.join(settings.PROJECT_DIRECTORY, 'mime.types')])
+        mimetypes.init([os.path.join(settings.WEBAPP_ROOT, 'mime.types')])
         mtype, file_encoding = mimetypes.guess_type(filename, False)
         if mtype is not None:
             response['content-type'] = mtype
@@ -302,10 +302,42 @@ def get(request, bytes=None):
 
     except BackendRefusedConnection, e:
         return JsonMessageResponseNotFound(BACKEND_REFUSED_CONNECTION_MESSAGE)
-    except Exception, e:
-        # The response from this view is displayed directly to the user, so
-        # we'll send a normal response rather than a JSON message.
-        raise Http404
+
+@authentication_required
+def zget(request):
+    """
+    Returns the requested uri. get_file returns an httplib response wrapped in a FileIterWrapper. This can then be read
+    by HttpResponse
+    """
+    yabiusername = request.user.username
+    try:
+        logger.debug("ws_frontend_views::zget() yabiusername: %s uri: %s" %(yabiusername, request.GET['uri']))
+        uri = request.GET['uri']
+        
+        sanitised_uri = uri
+        while sanitised_uri[-1]=='/':
+            sanitised_uri = sanitised_uri[:-1]
+        
+        try:
+            
+            filename = sanitised_uri.rsplit('/', 1)[-1]+".tar.gz"
+        except IndexError, e:
+            logger.critical('Unable to get filename from uri: %s' % uri)
+            filename = 'default.tar.gz'
+
+        response = HttpResponse(zget_file(yabiusername, uri))
+
+        mimetypes.init([os.path.join(settings.WEBAPP_ROOT, 'mime.types')])
+        mtype, file_encoding = mimetypes.guess_type(filename, False)
+        if mtype is not None:
+            response['content-type'] = mtype
+
+        response['content-disposition'] = 'attachment; filename=%s' % filename
+
+        return response
+
+    except BackendRefusedConnection, e:
+        return JsonMessageResponseNotFound(BACKEND_REFUSED_CONNECTION_MESSAGE)
 
 @authentication_required
 def put(request):
@@ -415,8 +447,9 @@ def munge_name(user, workflow_name):
         munged_name = "%s (%d)" % (base, val)
         
     return munged_name
- 
+
 @authentication_required
+@cache_page(20)
 def get_workflow(request, workflow_id):
     yabiusername = request.user.username
     logger.debug(yabiusername)
