@@ -1,35 +1,13 @@
-# -*- coding: utf-8 -*-
-### BEGIN COPYRIGHT ###
-#
-# (C) Copyright 2011, Centre for Comparative Genomics, Murdoch University.
-# All rights reserved.
-#
-# This product includes software developed at the Centre for Comparative Genomics 
-# (http://ccg.murdoch.edu.au/).
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, YABI IS PROVIDED TO YOU "AS IS," 
-# WITHOUT WARRANTY. THERE IS NO WARRANTY FOR YABI, EITHER EXPRESSED OR IMPLIED, 
-# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
-# FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY RIGHTS. 
-# THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF YABI IS WITH YOU.  SHOULD 
-# YABI PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR
-# OR CORRECTION.
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, OR AS OTHERWISE AGREED TO IN 
-# WRITING NO COPYRIGHT HOLDER IN YABI, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR 
-# REDISTRIBUTE YABI AS PERMITTED IN WRITING, BE LIABLE TO YOU FOR DAMAGES, INCLUDING 
-# ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE 
-# USE OR INABILITY TO USE YABI (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR 
-# DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES 
-# OR A FAILURE OF YABI TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER 
-# OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-# 
-### END COPYRIGHT ###
-# -*- coding: utf-8 -*-
+import hmac
+
 import gevent
-from utils.geventtools import sleep
+from twistedweb2 import http, responsecode, http_headers
+from yabibe.conf import config
+from yabibe.utils.geventtools import sleep
+
 
 DEFAULT_FUNCTION_RETRY = 3
+DEFAULT_FUNCTION_RETRY_TIME = 600.0
 
 def default_delay_generator():
     delay = 5.0
@@ -39,7 +17,7 @@ def default_delay_generator():
     while True:
         yield 300.          # five minutes forever more
     
-def retry(num_retries = DEFAULT_FUNCTION_RETRY, ignored=[], delay_func = None):
+def retry(num_retries = DEFAULT_FUNCTION_RETRY, redress=[], delay_func = None):
     """num_retries is how often to retry the function.
     ignored is a list of exception classes to ignore (allow to fall through and fail the function so it doesnt retry)
     delay_func is a generator function to produce the delay generator
@@ -51,13 +29,13 @@ def retry(num_retries = DEFAULT_FUNCTION_RETRY, ignored=[], delay_func = None):
                 gen = delay_func()
             else:
                 gen = default_delay_generator()
-            while True:
+            while num:
                 try:
                     return f(*args, **kwargs)               # exits on success
                 except Exception, exc:
-                    if True in [isinstance(exc,E) for E in ignored]:                # is this an exception we should ignore
+                    if True in [isinstance(exc,E) for E in redress]:                # is this an exception we should redress?
                         raise                                                       # raise the exception
-                    if num:
+                    if num-1:
                         delay = gen.next()
                         print "WARNING: retry-function",f,"raised exception",exc,"... waiting",delay,"seconds and retrying",num,"more times..."
                         sleep(delay)
@@ -67,7 +45,7 @@ def retry(num_retries = DEFAULT_FUNCTION_RETRY, ignored=[], delay_func = None):
         return new_func
     return retry_decorator    
 
-def timed_retry(total_time=600.,ignored=[]):
+def timed_retry(total_time=DEFAULT_FUNCTION_RETRY_TIME,redress=[]):
     def timed_retry_decorator(f):
         def new_func(*args, **kwargs):
             time_waited = 0.
@@ -76,28 +54,26 @@ def timed_retry(total_time=600.,ignored=[]):
                 try:
                     return f(*args, **kwargs)               # exits on success
                 except Exception, exc:
-                    if True in [isinstance(exc,E) for E in ignored]:                # is this an exception we should ignore
+                    if True in [isinstance(exc,E) for E in redress]:                # is this an exception we should ignore
                         raise                                                       # raise the exception
                     
-                    if time_waited<total_time:
-                        delay = gen.next()
-                        print "WARNING: retry-function",f,"raised exception",exc,"... waiting",delay,"seconds and retrying",num,"more times..."
-                        sleep(delay)
-                    else:
-                        raise                               # out of retries... fail
+                    delay = gen.next()
+                    print "WARNING: retry-function",f,"raised exception",exc,"... waiting",delay,"seconds and retrying..."
+                    sleep(delay)
+                    time_waited += delay
+
+            # ok. delay has now gone overlimit. run once more and just let exceptions bubble
+            return f(*args, **kwargs)               # exits on success
                         
         return new_func
     return timed_retry_decorator    
-    
-from conf import config
 
-def conf_retry(ignored=[]):
-    return timed_retry(config.config["taskmanager"]["retrywindow"], ignored)
+def conf_retry(redress=[]):
+    return timed_retry(config.config["taskmanager"]["retrywindow"], redress)
 
 def lock(maximum):
     def lock_decorator(f):
-        if not hasattr(f,'_CONNECTION_COUNT'):
-            f._CONNECTION_COUNT = 0
+        f._CONNECTION_COUNT = 0
         def new_func(*args, **kwargs):
             
             # pre lock
@@ -129,9 +105,6 @@ def call_count(f):
             f._CONNECTION_COUNT -= 1
     return new_func
 
-from twistedweb2 import http, responsecode, http_headers
-import hmac
-from conf import config
 
 #
 # for resources that need to be authed via hmac secret
