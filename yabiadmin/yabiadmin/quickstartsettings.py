@@ -74,7 +74,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'south',
     'djamboloader',
-    'django.contrib.admin'
+    'django.contrib.admin',
 ]
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#root-urlconf
@@ -165,9 +165,9 @@ TEMPLATE_DEBUG = DEBUG
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#template-loaders
 TEMPLATE_LOADERS = [
-    'django.template.loaders.app_directories.Loader',
+    #'django.template.loaders.filesystem.Loader',
     'ccg.template.loaders.makoloader.filesystem.Loader',
-    #'django.template.loaders.filesystem.Loader'
+    'django.template.loaders.app_directories.Loader'
 ]
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#template-dirs
@@ -188,36 +188,36 @@ MAKO_MODULENAME_CALLABLE = ''
 # these are the settings you will most likely change to reflect your setup
 
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#databases
-#DATABASES = {
-    #'default': {
-        #'ENGINE': 'django.db.backends.sqlite3',
-        #'USER': '',
-        #'NAME': 'yabiadmin.sqlite3',
-        #'PASSWORD': '', 
-        #'HOST': '',                    
-        #'PORT': '',
-        #'OPTIONS': {
-            #'timeout': 20,
-        #}
-    #}
-#}
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'USER': 'root',
-        'NAME': 'dev_yabi',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'USER': '',
+        'NAME': 'yabiadmin_quickstart.sqlite3',
         'PASSWORD': '', 
-        'HOST': 'localhost',                    
+        'HOST': '',                    
         'PORT': '',
-        'OPTIONS': {}
+        'OPTIONS': {
+            'timeout': 20,
+        }
     }
 }
+
+#DATABASES = {
+    #'default': {
+        #'ENGINE': 'django.db.backends.mysql',
+        #'USER': 'root',
+        #'NAME': 'dev_yabi',
+        #'PASSWORD': '', 
+        #'HOST': 'localhost',                    
+        #'PORT': '',
+        #'OPTIONS': {}
+    #}
+#}
 
 # Make this unique, and don't share it with anybody.
 # see: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 SECRET_KEY = 'set_this'
-HMAC_KEY = 'set_this'
+HMAC_KEY = 'quickstart'
 
 # email settings so yabi can send email error alerts etc
 # see https://docs.djangoproject.com/en/dev/ref/settings/#email-host
@@ -275,7 +275,7 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 0
 BACKEND_IP = '0.0.0.0'
 BACKEND_PORT = '9001'
 BACKEND_BASE = '/'
-TASKTAG = 'set_this' # this must be the same in the yabi.conf for the backend that will consume tasks from this admin
+TASKTAG = 'quickstart' # this must be the same in the yabi.conf for the backend that will consume tasks from this admin
 YABIBACKEND_SERVER = BACKEND_IP + ':' +  BACKEND_PORT
 YABISTORE_HOME = os.path.join(WRITABLE_DIRECTORY, 'store')
 

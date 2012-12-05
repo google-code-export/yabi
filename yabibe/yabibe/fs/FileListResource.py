@@ -87,6 +87,7 @@ class FileListResource(resource.PostableResource):
 
         uri = request.args['uri'][0]
         scheme, address = parse_url(uri)
+        
         if not hasattr(address,"username"):
             return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
         
@@ -107,6 +108,7 @@ class FileListResource(resource.PostableResource):
             print "URI",uri
             print "ADDRESS",address
         
+ 
         # our client channel
         client_channel = defer.Deferred()
         
