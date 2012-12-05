@@ -45,7 +45,7 @@ from yabiadmin.yabi.models import BackendCredential
 import logging
 logger = logging.getLogger(__name__)
 
-from constants import *
+from yabiadmin.constants import *
 from random import shuffle
 
 def request_next_task(request, status):
@@ -91,7 +91,7 @@ def request_next_task(request, status):
         if tasks_per_user==None or len(remote_tasks) < tasks_per_user:
             # we can return a task for this bec if one exists
             try:
-                tasks = [T for T in Task.objects.filter(execution_backend_credential=bec).filter(tasktag=tasktag) if T.status==status]
+                tasks = [T for T in Task.objects.filter(execution_backend_credential=bec).filter(tasktag=tasktag).filter(status_requested__isnull=True) if T.status==status]
                 
                 #logger.warning("FOUND %s: (%d tasks) %s"%(status,len(tasks),tasks))
                 
@@ -284,6 +284,7 @@ def error(request, table, id):
             if "message" not in request.POST:
                 return HttpResponseServerError("POST request to error service should contain 'message' parameter\n")
 
+            logger.critical('table: %s id: %s message: %s' % (table, id, request.POST["message"]))
             syslog = Syslog(table_name=str(table),
                             table_id=int(id),
                             message=str(request.POST["message"])
@@ -293,7 +294,11 @@ def error(request, table, id):
 
             return HttpResponse("Thanks!")
 
-    except (ObjectDoesNotExist,ValueError):
+    except ObjectDoesNotExist, o:
+        logger.critical("Caught Exception: %s" % o.message)
+        return HttpResponseNotFound("Object not found")
+    except ValueError, ve:
+        logger.critical("Caught Exception: %s" % ve.message)
         return HttpResponseNotFound("Object not found")
     except Exception, e:
         logger.critical("Caught Exception: %s" % e.message)
