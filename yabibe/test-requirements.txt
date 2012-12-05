@@ -1,0 +1,6 @@
+-r requirements.txt
+
+unittest2
+coverage
+mock
+nose
