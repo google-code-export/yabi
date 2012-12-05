@@ -1,0 +1,260 @@
+import unittest2 as unittest
+import gevent
+from mock import MagicMock, patch
+
+from yabibe.utils import decorators
+
+
+def debug(*args, **kwargs):
+    import sys
+    sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+
+def nothing():
+    pass
+
+mock_gevent_sleep = MagicMock(name='mock_nothing')
+
+@patch('gevent.sleep',mock_gevent_sleep)
+class DecoratorsTestSuite(unittest.TestCase):
+    """Test yabibe.utils.decorators"""
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        pass
+        #mock_gevent_sleep.reset_mock()
+
+    def test_delay_generator(self):
+        # all values must be above this
+        last_delay = 0
+
+        # count our values so we can exit loop when we've had enough
+        count = 0
+        
+        for delay in decorators.default_delay_generator():
+            # delay generator should always increase
+            # and be infinite (difficult to test! just test its really long)
+            self.assertTrue(delay >= last_delay)
+
+            # should be a number
+            self.assertTrue(type(delay) is int or type(delay) is float)
+
+            # exit if we're the nth run
+            if count > 1000:
+                break
+
+            # update loop
+            count += 1
+            last_delay = delay
+
+    def test_retry_decorator_success(self):
+        """test that a successful inner call doesnt trigger a retry"""
+        count = [0]
+
+        def inner():
+            count[0] += 1
+
+        # call inner
+        newfunc = decorators.retry()(inner)
+        newfunc()
+
+        self.assertTrue(count[0]==1)
+
+    def test_retry_decorator_failed(self):
+        """test that a failing inner function triggers a retry"""
+        count = [0]
+
+        class TestException(Exception): pass
+
+        def inner():
+            count[0] += 1
+            raise TestException
+
+        # call inner
+        newfunc = decorators.retry()(inner)
+
+        # call func. make sure the right exception is raised
+        self.assertRaises( TestException, newfunc)
+
+        # our count should be DEFAULT_FUNCTION_RETRY
+        self.assertEqual( count[0], decorators.DEFAULT_FUNCTION_RETRY )
+
+    def test_retry_decorator_custom_fail(self):
+        """test that a decorator behaves with custom retry count"""
+        count = [0]
+
+        class TestException(Exception): pass
+
+        def inner():
+            count[0] += 1
+            raise TestException
+
+        for retrynum in (1,10,100,1000):            
+            # reset count
+            count[0] = 0
+
+            # call inner
+            newfunc = decorators.retry(num_retries=retrynum)(inner)
+
+            # call func. make sure the right exception is raised
+            self.assertRaises( TestException, newfunc)
+
+            # our count should be DEFAULT_FUNCTION_RETRY
+            self.assertEqual( count[0], retrynum )
+
+    def test_retry_zero_times_never_calls(self):
+        """test that a decorator behaves with custom retry count"""
+        count = [0]
+
+        def inner():
+            count[0] = 1
+
+        # decorate & call
+        newfunc = decorators.retry(num_retries=0)(inner)
+        newfunc()
+
+        # make sure inner was never called
+        self.assertEqual( count[0], 0 )
+    
+    def test_retry_redress_correct_exceptions(self):
+        """test that redress exceptions works on retry"""
+        count = [0]
+
+        class NotImportant(Exception): pass
+        class Important(Exception): pass
+
+        def inner():
+            count[0] += 1
+            if count[0]==1:
+                # first time raise unimportant exception
+                raise NotImportant
+            else:
+                # later times raise important exception
+                raise Important
+
+        # decorate and call
+        newfunc = decorators.retry(num_retries=5, redress=[Important])(inner)
+        self.assertRaises(Important, newfunc)
+
+        # count should be 2 because inner should have been called twice. Once with ignored exception, once without
+        self.assertEquals( count[0], 2 )
+
+    def test_custom_delay_generator_works(self):
+        """test that custom delay generator is used"""
+        gencount = [0]
+        def custom_gen():
+            """count how many times weve generated a value. always generate 1.0"""
+            while True:
+                gencount[0] += 1
+                yield 1.0
+
+        count = [0]
+        def inner():
+            count[0] += 1
+            if count[0]<10:
+                raise Exception
+
+        # decorate and call
+        newfunc = decorators.retry(num_retries=20, delay_func=custom_gen)(inner)
+        newfunc()
+
+        # should have been called 10 times
+        self.assertEquals( count[0], 10)
+
+        # generator should have been called one less time. retrying 10 times requires being delayed 9.
+        self.assertEquals( gencount[0], 9)
+
+    def test_timed_retry(self):
+        """test timed retry"""
+        mock_gevent_sleep.reset_mock()
+
+        class TestException(Exception): pass
+
+        def inner():
+            raise TestException
+
+        # decorate and call
+        newfunc = decorators.timed_retry()(inner)
+        self.assertRaises(TestException, newfunc)
+
+        # total sleeping time must be more than total wait time
+        total_sleep = sum([c[0][0] for c in mock_gevent_sleep.call_args_list])
+        self.assertGreaterEqual(total_sleep, decorators.DEFAULT_FUNCTION_RETRY_TIME)
+
+    def test_timed_retry_custom_timeout(self):
+        """test custom timed retry"""
+        class TestException(Exception): pass
+
+        def inner():
+            raise TestException
+
+        for delay in (0,1,10,100,1000,10000):
+            # decorate and call
+            newfunc = decorators.timed_retry(total_time=delay)(inner)
+            self.assertRaises(TestException, newfunc)
+
+            # total sleeping time must be more than total wait time
+            total_sleep = sum([c[0][0] for c in mock_gevent_sleep.call_args_list])
+            self.assertGreaterEqual(total_sleep, delay)
+
+    def test_timed_retry_redress_exceptions_list(self):
+        """test redress exception list in timed retry"""
+        count = [0]
+
+        class NotImportant(Exception): pass
+        class Important(Exception): pass
+
+        def inner():
+            count[0] += 1
+            if count[0]==1:
+                # first time raise unimportant exception
+                raise NotImportant
+            else:
+                # later times raise important exception
+                raise Important
+
+        # decorate and call
+        newfunc = decorators.timed_retry(redress=[Important])(inner)
+        self.assertRaises(Important, newfunc)
+
+        # count should be 2 because inner should have been called twice. Once with ignored exception, once without
+        self.assertEquals( count[0], 2 )
+
+    def test_conf_retry(self):
+        def inner():
+            pass
+
+        # decorate and call
+        newfunc = decorators.conf_retry()(inner)
+        newfunc()
+
+
+class SleepyDecoratorsTestSuite(unittest.TestCase):
+    """Test yabibe.utils.decorators that require real gevent sleeps"""
+    def test_lock(self):
+        def inner():
+            for i in range(100):
+                gevent.sleep(0)
+
+        # decorate and call
+        newfunc = decorators.lock(3)(inner)
+
+        def lock_greenlet(num):
+            print "pre[%d]:%d"%(num,inner._CONNECTION_COUNT)
+            newfunc()
+            print "post[%d]:%d"%(num,inner._CONNECTION_COUNT)
+            self.assertTrue(False)
+
+        simultaneous = 5
+        gthreads = [gevent.spawn(lock_greenlet,n) for n in range(simultaneous)]
+        for thread in gthreads:
+            thread.join()
+
+        self.assertTrue(False)
+        
+    def ntest_zzz(self):
+        mock_gevent_sleep.reset_mock()
+        callcount = mock_gevent_sleep.call_count
+        debug(callcount)
+        debug(dir(mock_gevent_sleep))
+        debug(mock_gevent_sleep.call_args_list)
