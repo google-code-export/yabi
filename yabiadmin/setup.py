@@ -16,7 +16,7 @@ for package in packages:
     os.chdir(start_dir)
 
 setup(name='yabiadmin',
-    version='0.1',
+    version='0.2',
     description='Yabi Admin',
     long_description='Yabi front end and administration web interface',
     author='Centre for Comparative Genomics',
@@ -56,7 +56,6 @@ setup(name='yabiadmin',
         'pygooglechart==0.2.1',
         'pyparsing==1.5.6',
         'python-dateutil==1.5',
-        #'virtualenv==1.6.4',
         'wsgiref==0.1.2',
         'python-memcached==1.48',
         'Mako==0.5.0',
