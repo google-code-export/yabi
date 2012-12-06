@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from conf import config
-config.read_config()
-config.sanitise()
+import os
+
+config.read_defaults()
 
 # for SSL context
 from OpenSSL import SSL
