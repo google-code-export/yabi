@@ -1,10 +1,11 @@
 import unittest2 as unittest
 import gevent
+import hmac
 from mock import MagicMock, patch
 
 from yabibe.utils import decorators
-
-
+from twisted.web.http_headers import Headers
+            
 def debug(*args, **kwargs):
     import sys
     sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
@@ -239,22 +240,128 @@ class SleepyDecoratorsTestSuite(unittest.TestCase):
         # decorate and call
         newfunc = decorators.lock(3)(inner)
 
-        def lock_greenlet(num):
-            print "pre[%d]:%d"%(num,inner._CONNECTION_COUNT)
-            newfunc()
-            print "post[%d]:%d"%(num,inner._CONNECTION_COUNT)
-            self.assertTrue(False)
+        # what order the greenlet intereiors should schedule
+        # (greenlet_num, lock_num)
+        # we check them against this to make sure lock is working
+        order_pre = [ (0,0), (1,1), (2,2), (3,3), (4,3), (5,3) ]
+        order_post = [ (0,2),              # we come out of task 0 first, and theres one less lock
+                       (1,1),
+                       (2,0),              # from here on...
+                       (4,2),              # its a funny order
+                       (5,1),
+                       (3,0)
+                     ]
 
+        def lock_greenlet(num):
+            self.assertEquals( (num,inner._CONNECTION_COUNT), order_pre.pop(0) )
+            newfunc()
+            self.assertEquals( (num,inner._CONNECTION_COUNT), order_post.pop(0) )
+
+        simultaneous = 6
+        gthreads = [gevent.spawn(lock_greenlet,n) for n in range(simultaneous)]
+        for thread in gthreads:
+            thread.join()
+
+        # make sure the order lists are empty
+        self.assertFalse(order_pre)
+        self.assertFalse(order_post)
+        
+    def test_call_count(self):
+        def inner():
+            for i in range(100):
+                gevent.sleep(0)
+
+        # decorate and call
+        newfunc = decorators.call_count(inner)
+
+        # order of counts for each task. Just the count numbers
+        order_pre = range(5)
+        order_post = [I for I in reversed(range(5))]
+
+        def lock_greenlet(num):
+            self.assertEquals( inner._CONNECTION_COUNT, order_pre.pop(0) )
+            newfunc()
+            self.assertEquals( inner._CONNECTION_COUNT, order_post.pop(0) )
+            
         simultaneous = 5
         gthreads = [gevent.spawn(lock_greenlet,n) for n in range(simultaneous)]
         for thread in gthreads:
             thread.join()
 
-        self.assertTrue(False)
+        # make sure the order lists are empty
+        self.assertFalse(order_pre)
+        self.assertFalse(order_post)
+
+    def test_hmac_incorrect(self):
+        headers = Headers()
+        headers.addRawHeader('hmac-digest','bogus_hmac_header')
+
+        class DummyRequest(object):
+            pass
         
-    def ntest_zzz(self):
-        mock_gevent_sleep.reset_mock()
-        callcount = mock_gevent_sleep.call_count
-        debug(callcount)
-        debug(dir(mock_gevent_sleep))
-        debug(mock_gevent_sleep.call_args_list)
+        request = DummyRequest()
+        request.uri = 'http://this'
+        request.headers = headers
+
+        def inner(dummy,request):
+            print request
+
+        # we pass it our fake request and we should get back a twistedweb2.http.response object
+        newfunc = decorators.hmac_authenticated(inner)
+        result = newfunc(None,request)
+
+        self.assertEquals(result.code, 401)
+        buff = result.stream.read()
+        text = str(buff)
+        self.assertTrue('hmac-digest' in text and 'incorrect' in text)
+
+    def test_hmac_missing_header(self):
+        headers = Headers()
+
+        class DummyRequest(object):
+            pass
+        
+        request = DummyRequest()
+        request.uri = 'http://this'
+        request.headers = headers
+
+        def inner(dummy,request):
+            print request
+
+        # we pass it our fake request and we should get back a twistedweb2.http.response object
+        newfunc = decorators.hmac_authenticated(inner)
+        result = newfunc(None,request)
+
+        self.assertEquals(result.code, 400)
+        buff = result.stream.read()
+        text = str(buff)
+        self.assertTrue('No hmac-digest header present' in text)            
+
+    def test_hmac_correct_headers(self):
+        for uri in ('http://www.google.com/', 'https://localhost:8312/path/to/resource?get=var+extra&another=1','safswert?#$!&%*^&*' ):
+            from yabibe.conf import config
+            hmac_digest = hmac.new(config.config['backend']['hmackey']) 
+            hmac_digest.update(uri)
+            hmac_hex = hmac_digest.hexdigest()
+
+            headers = Headers()
+            headers.addRawHeader('hmac-digest',hmac_hex)
+
+            class DummyRequest(object):
+                pass
+
+            request = DummyRequest()
+            request.uri = uri
+            request.headers = headers
+
+            def inner(dummy,request):
+                return "RESULT"
+
+            # we pass it our fake request and we should get back a twistedweb2.http.response object
+            newfunc = decorators.hmac_authenticated(inner)
+            result = newfunc(None,request)
+
+            #make sure we get what inner passed out
+            self.assertEquals(result, "RESULT")
+
+        
