@@ -1,11 +1,12 @@
-import unittest2 as unittest
-import gevent
 import hmac
-from mock import MagicMock, patch
 
-from yabibe.utils import decorators
+import gevent
+import unittest2 as unittest
+from mock import MagicMock, patch
 from twisted.web.http_headers import Headers
-            
+from yabibe.utils import decorators
+
+
 def debug(*args, **kwargs):
     import sys
     sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
