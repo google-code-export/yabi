@@ -1,8 +1,9 @@
 import unittest2 as unittest
 from mock import MagicMock, patch
 import os
+import StringIO
 
-from yabibe.conf import parse_url, port_setting
+from yabibe.conf import parse_url, port_setting, email_setting, ConfigError, Configuration
             
 def debug(*args, **kwargs):
     import sys
@@ -47,10 +48,59 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals(data.password, 'password')
 
     def test_port_settings(self):
-        data = port_setting('8000')
-        self.assertEquals(data, ('0.0.0.0', 8000))
+        self.assertEquals(port_setting('8000'), ('0.0.0.0', 8000))
+        self.assertEquals(port_setting('127.0.0.1'), ('127.0.0.1', 8000))
+        self.assertEquals(port_setting('10.0.0.1:80'), ('10.0.0.1',80))
 
-        #data = port_setting('bah')
+        # check malformed port
+        self.assertRaises(
+            ConfigError,
+            port_setting,
+            'blah'
+        )
 
-        #print data
-        #self.assertTrue(False)
+    def test_email_setting(self):
+        email_conversions = [
+            ('Bob Jones <bob@nowhere.com>', 'Bob Jones', 'bob@nowhere.com'),
+            ('Terry\t<terry@blah.com>','Terry','terry@blah.com'),
+            ('anon@google.com','','anon@google.com'),
+            ('<test@test.com>','','test@test.com')
+        ]
+
+        for string, name, email in email_conversions:
+            cname, cemail = email_setting(string)
+            self.assertEquals(name,cname)
+            self.assertEquals(email,cemail)
+
+    def test_Configuration_instantiate(self):
+        Configuration()
+
+    def test_Configuration_read_defaults(self):
+        Configuration().read_defaults()
+        
+    def test_Configuration_read_from_data(self):
+        test_hmac_key = "this is a test hmac key"
+        conf_snippet = "[backend]\nhmackey: %s\n"%(test_hmac_key)
+
+        c = Configuration()
+        c.read_from_data(conf_snippet)
+
+        self.assertEquals( c.config['backend']['hmackey'], test_hmac_key )
+
+    def test_Configuration_read_from_fp(self):
+        test_hmac_key = "this is a test hmac key"
+        conf_snippet = "[backend]\nhmackey: %s\n"%(test_hmac_key)
+
+        fp = StringIO.StringIO(conf_snippet)
+
+        c = Configuration()
+        c.read_from_fp(fp)
+
+        self.assertEquals( c.config['backend']['hmackey'], test_hmac_key )
+
+    def test_Configuration_read_every_section(self):
+        test_conf = "[backend]\n[taskmanager]\n[ssh+sge]\n[execution]\n"
+
+        c = Configuration()
+        c.read_from_data(test_conf)
+        

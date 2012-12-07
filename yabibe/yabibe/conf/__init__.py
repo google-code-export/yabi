@@ -1,31 +1,3 @@
-# -*- coding: utf-8 -*-
-### BEGIN COPYRIGHT ###
-#
-# (C) Copyright 2011, Centre for Comparative Genomics, Murdoch University.
-# All rights reserved.
-#
-# This product includes software developed at the Centre for Comparative Genomics 
-# (http://ccg.murdoch.edu.au/).
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, YABI IS PROVIDED TO YOU "AS IS," 
-# WITHOUT WARRANTY. THERE IS NO WARRANTY FOR YABI, EITHER EXPRESSED OR IMPLIED, 
-# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
-# FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY RIGHTS. 
-# THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF YABI IS WITH YOU.  SHOULD 
-# YABI PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR
-# OR CORRECTION.
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, OR AS OTHERWISE AGREED TO IN 
-# WRITING NO COPYRIGHT HOLDER IN YABI, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR 
-# REDISTRIBUTE YABI AS PERMITTED IN WRITING, BE LIABLE TO YOU FOR DAMAGES, INCLUDING 
-# ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE 
-# USE OR INABILITY TO USE YABI (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR 
-# DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES 
-# OR A FAILURE OF YABI TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER 
-# OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-# 
-### END COPYRIGHT ###
-
 """
 Configuration
 =============
@@ -68,6 +40,9 @@ syslog_facilities = {
     'LOG_LOCAL7':syslog.LOG_LOCAL7
 }
 
+class ConfigError(Exception):
+    pass
+
 def parse_url(uri):
     """Parse a url via the inbuilt urlparse. But this is slightly different
     as it can handle non-standard schemas. returns the schema and then the
@@ -82,12 +57,8 @@ SEARCH_PATH = ["~/.yabi/yabi.conf","~/.yabi/backend/yabi.conf","~/yabi.conf","~/
 ##
 ## Support functions that do some text processing
 ##
-
 def port_setting(port):
     """returns ip,port or raises exception if error"""
-    if type(port) is tuple:
-	return port
-    
     re_port = re.compile(r'^(\d+\.\d+\.\d+\.\d+)(:\d+)?$')
     result = re_port.search(port)
     if result:
@@ -95,10 +66,9 @@ def port_setting(port):
         port = int(result.group(2)[1:]) if result.group(2) else 8000
         return ip, port
     try:
-        if str(int(port))==port:
-            return '0.0.0.0',int(port)
+        return '0.0.0.0',int(port)
     except ValueError, ve:
-        raise Exception, "malformed IP:port setting"
+        raise ConfigError, "malformed IP:port setting"
 
 def email_setting(email):
     """process an email of the form "First Last <email@server.com>" into name and email.
@@ -113,13 +83,9 @@ boolean_proc = lambda x: x if type(x) is bool else x.lower()=="true" or x.lower(
 def path_sanitise(path):
     return os.path.normpath(os.path.expanduser(path))
 
-class ConfigError(Exception):
-    pass
-
 ##
-## The Configuration store. Singleton.
+## The Configuration store.
 ##
-
 class Configuration(object):
     """Holds the running configuration for the full yabi stack that is running under this twistd"""
     SECTIONS = ['backend']       # sections of the config file
@@ -172,21 +138,25 @@ class Configuration(object):
     }
 
     def read_defaults(self):
+        """read the underlying defaults into the configuration object"""
         self.read_from_file(os.path.join(os.path.dirname(__file__),"yabi_defaults.conf"))
-        if "YABICONF" in os.environ:
-            self.read_from_file(os.environ['YABICONF'])
-        elif "QUICKSTART" in os.environ:
-            self.read_from_file(os.path.join(os.path.dirname(__file__),"yabibe-quickstart.conf"))
-        else:
-            self.read_config()
-        self.sanitise()
-    
+        
     def read_from_data(self,dat):
-        return self.read_from_fp(StringIO.StringIO(dat))
-    
+        self.read_from_fp(StringIO.StringIO(dat))
+        
     def read_from_file(self,filename):
-        return self.read_from_fp(open(filename)) if os.path.exists(filename) and os.path.isfile(filename) else None
-    
+        self.read_from_fp(open(filename)) if os.path.exists(filename) and os.path.isfile(filename) else None
+
+    def _conditional_parse_get(self, parser, name, key, proc = None):
+        """if the config block has section [name] with key 'key', set it in the config dictionary
+        after processing it through proc func if that is set"""
+        if parser.has_section(name):
+            if parser.has_option(name, key):
+                if proc is not None:
+                    self.config[name][key] = proc(parser.get(name,key))
+                else:
+                    self.config[name][key] = parser.get(name,key)
+        
     def read_from_fp(self,fp):
         conf_parser = ConfigParser.ConfigParser()
         conf_parser.readfp(fp)
@@ -205,53 +175,33 @@ class Configuration(object):
         
         # taskmanager section
         name = "taskmanager"
-        if conf_parser.has_section(name):
-            self.config[name]['polldelay'] = conf_parser.get(name,'polldelay')
-            self.config[name]['startup'] = boolean_proc(conf_parser.get(name,'startup'))
-            if conf_parser.has_option(name,'tasktag'):
-                self.config[name]['tasktag'] = conf_parser.get(name,'tasktag')
-            if conf_parser.has_option(name,'retrywindow'):
-                self.config[name]['retrywindow'] = conf_parser.get(name,'retrywindow')
-                
+        self._conditional_parse_get(conf_parser, name, 'polldelay')
+        self._conditional_parse_get(conf_parser, name, 'startup', boolean_proc ) 
+        self._conditional_parse_get(conf_parser, name, 'tasktag')
+        self._conditional_parse_get(conf_parser, name, 'retrywindow')
+                                    
         # ssh+sge section
         name = "sge+ssh"
-        if conf_parser.has_section(name):
-            self.config[name]['qstat'] = conf_parser.get(name,'qstat')
-            self.config[name]['qsub'] = conf_parser.get(name,'qsub')
-            self.config[name]['qacct'] = conf_parser.get(name,'qacct')
-            
+        for key in ('qstat','qsub','qacct'):
+            self._conditional_parse_get(conf_parser, name, key)
+        
         # execution section
         name = "execution"
-        if conf_parser.has_section(name):
-            for part in ('logcommand','logscripts'):
-                self.config[name][part] = boolean_proc(conf_parser.get(name,part))
-            
+        for key in ('logcommand','logscripts'):
+            self._conditional_parse_get(conf_parser, name, key, boolean_proc )
              
         # backend section
         name = "backend"
-        if conf_parser.has_section(name):
-            self.config[name]['admin'] = conf_parser.get(name,'admin')
-            if conf_parser.has_option(name,'fifos'):
-                self.config[name]['fifos'] = path_sanitise(conf_parser.get(name,'fifos'))
-            if conf_parser.has_option(name,'tasklets'):
-                self.config[name]['tasklets'] = path_sanitise(conf_parser.get(name,'tasklets'))
-            if conf_parser.has_option(name,'certificates'):
-                self.config[name]['certificates'] = path_sanitise(conf_parser.get(name,'certificates'))
-            if conf_parser.has_option(name,'temp'):
-                self.config[name]['temp'] = path_sanitise(conf_parser.get(name,'temp'))
-            if conf_parser.has_option(name,'keyfile'):
-                self.config[name]['keyfile'] = path_sanitise(conf_parser.get(name,'keyfile'))
-            if conf_parser.has_option(name,'certfile'):
-                self.config[name]['certfile'] = path_sanitise(conf_parser.get(name,'certfile'))
-            if conf_parser.has_option(name,'hmackey'):
-                self.config[name]['hmackey'] = conf_parser.get(name,'hmackey')
-            if conf_parser.has_option(name,'syslog_facility'):
-                self.config[name]['syslog_facility'] = syslog_facilities[ conf_parser.get(name,'syslog_facility').upper() ]
-            if conf_parser.has_option(name,'syslog_prefix'):
-                self.config[name]['syslog_prefix'] = conf_parser.get(name,'syslog_prefix').replace('{',r'%(').replace('}',')s')
-            if conf_parser.has_option(name,'admin_cert_check'):
-                self.config[name]['admin_cert_check'] = boolean_proc(conf_parser.get(name,'admin_cert_check'))
-            
+        
+        for key in ('fifos','tasklets','certificates','temp','keyfile','certfile'):
+            self._conditional_parse_get(conf_parser, name, key, path_sanitise)
+
+        for key in ('admin','hmackey'):
+            self._conditional_parse_get(conf_parser, name, key)
+
+        self._conditional_parse_get(conf_parser, name, 'syslog_prefix', lambda x: x.replace('{',r'%(').replace('}',')s') )
+        self._conditional_parse_get(conf_parser, name, 'syslog_facility', lambda x: syslog_facilities[x.upper()] )
+        self._conditional_parse_get(conf_parser, name, 'admin_cert_check', boolean_proc )
 
     def read_config(self, search=SEARCH_PATH):
         for part in search:
@@ -272,7 +222,6 @@ class Configuration(object):
                 telnet=boolean_proc,
                 telnetport=port_setting,
                 debug=boolean_proc
-                
             )
             
             for key, value in conversions.iteritems():
@@ -341,5 +290,6 @@ class Configuration(object):
         """Make a unique filename in the tempfile area and return its filename"""
         tempdir = self.config['backend']['temp']
         return tempfile.mkstemp(suffix,prefix,dir=tempdir)
-    
+
+# singleton
 config = Configuration()
