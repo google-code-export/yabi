@@ -60,28 +60,13 @@ def server():
     site = server.Site(res)
 
     # for HTTPS, we need a server context factory to build the context for each ssl connection
-
     if config.config['backend']['start_http']:
         internet.TCPServer(config.config['backend']['port'][1], channel.HTTPFactory(site), interface=config.config['backend']['port'][0]).setServiceParent(application)
 
     if config.config['backend']['start_https']:
         internet.SSLServer(config.config['backend']['sslport'][1], channel.HTTPFactory(site), ServerContextFactory(), interface=config.config['backend']['sslport'][0]).setServiceParent(application)
 
-    if config.config['backend']['telnet']:
-        # telnet port to python shell
-        from twisted.manhole import telnet
-
-        shellfactory = telnet.ShellFactory()
-        reactor.listenTCP(config.config['backend']['telnetport'][1], shellfactory)
-        shellfactory.namespace['app']=application
-        shellfactory.namespace['site']=site
-        shellfactory.username = ''
-        shellfactory.password = ''
-
-
     reactor.addSystemEventTrigger("after", "startup", startup)
-
-
     reactor.addSystemEventTrigger("before","shutdown",shutdown)
 
 def shutdown():

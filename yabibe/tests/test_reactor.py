@@ -8,8 +8,8 @@ def debug(*args, **kwargs):
     import sys
     sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
-class DecoratorsTestSuite(unittest.TestCase):
-    """Test yabibe.utils.decorators"""
+class ReactorTestSuite(unittest.TestCase):
+    """Test yabibe.reactor"""
     def setUp(self):
         pass
 
