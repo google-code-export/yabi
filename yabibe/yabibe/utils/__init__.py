@@ -10,3 +10,4 @@ def rm_rf(root,contents_only=False):
     if not contents_only:
         os.rmdir(root)
 
+import decorators

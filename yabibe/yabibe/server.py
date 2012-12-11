@@ -1,7 +1,7 @@
 import sys, os, pwd
 
-import geventreactor
-from BaseResource import base
+from reactor import GeventReactor
+from resources.BaseResource import base
 from twisted.application import service, internet
 from twisted.internet import reactor
 from twisted.python import syslog
@@ -12,8 +12,7 @@ from ServerContextFactory import ServerContextFactory
 
 def server():
     #sys.path.append(os.path.dirname(__file__))                  # add our base directory to the pythonpath
-
-
+    
     #read config
     config.read_defaults()
 
@@ -23,12 +22,8 @@ def server():
     assert config.config['backend'].has_key('hmackey'), "[backend] section of yabi.conf is missing 'hmackey' setting"
     assert config.config['backend']['hmackey'], "[backend] section of yabi.conf has unset 'hmackey' value"
 
-
-    geventreactor.install()
-
-
+    GeventReactor.install()
     # for SSL context
-
 
     # Twisted Application Framework setup:
     application = service.Application('yabibe')
@@ -70,13 +65,20 @@ def server():
     reactor.addSystemEventTrigger("before","shutdown",shutdown)
 
 def shutdown():
-    import TaskManager
-    TaskManager.shutdown()
+    """We run this before the server shuts down
+    """
+    # stop TaskManager if its running
+    if config.config["taskmanager"]["startup"]:
+        import TaskManager
+        TaskManager.shutdown()
 
     # shutdown our connectors
     base.shutdown()
 
 def startup():
+    """After startup we run this.
+    It cleans the paths up, starts up the taskmanager if its switched on and bolts in the resources
+    """
     # setup yabiadmin server, port and path as global variables
     print "yabi admin server:",config.config["backend"]["admin"]
 
