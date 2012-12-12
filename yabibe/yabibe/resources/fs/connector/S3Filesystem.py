@@ -1,41 +1,13 @@
-# -*- coding: utf-8 -*-
-### BEGIN COPYRIGHT ###
-#
-# (C) Copyright 2011, Centre for Comparative Genomics, Murdoch University.
-# All rights reserved.
-#
-# This product includes software developed at the Centre for Comparative Genomics 
-# (http://ccg.murdoch.edu.au/).
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, YABI IS PROVIDED TO YOU "AS IS," 
-# WITHOUT WARRANTY. THERE IS NO WARRANTY FOR YABI, EITHER EXPRESSED OR IMPLIED, 
-# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
-# FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY RIGHTS. 
-# THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF YABI IS WITH YOU.  SHOULD 
-# YABI PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR
-# OR CORRECTION.
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, OR AS OTHERWISE AGREED TO IN 
-# WRITING NO COPYRIGHT HOLDER IN YABI, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR 
-# REDISTRIBUTE YABI AS PERMITTED IN WRITING, BE LIABLE TO YOU FOR DAMAGES, INCLUDING 
-# ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE 
-# USE OR INABILITY TO USE YABI (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR 
-# DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES 
-# OR A FAILURE OF YABI TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER 
-# OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-# 
-### END COPYRIGHT ###
-# -*- coding: utf-8 -*-
-import FSConnector
-from utils.protocol import globus
-import gevent
-from utils.parsers import *
-from Exceptions import PermissionDenied, InvalidPath
-from FifoPool import Fifos
-from twisted.internet import protocol
-from twisted.internet import reactor
 import os
-from utils.protocol import s3
+
+from boto.s3.connection import S3Connection, OrdinaryCallingFormat
+from boto.s3.key import Key
+
+import FSConnector
+from yabibe.Exceptions import InvalidPath
+from yabibe.utils.protocol import s3
+from yabibe.utils.protocol.s3 import s3utils
+
 
 s3auth = s3.S3Auth.S3Auth()
 
@@ -51,10 +23,7 @@ SCHEMA = "s3"
 DEBUG = False
 
 # helper utilities for s3
-from utils.protocol.s3 import s3utils
     
-from boto.s3.connection import S3Connection, OrdinaryCallingFormat
-from boto.s3.key import Key
     
 class S3Error(Exception):
     pass
