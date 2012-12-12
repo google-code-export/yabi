@@ -1,43 +1,15 @@
-# -*- coding: utf-8 -*-
-### BEGIN COPYRIGHT ###
-#
-# (C) Copyright 2011, Centre for Comparative Genomics, Murdoch University.
-# All rights reserved.
-#
-# This product includes software developed at the Centre for Comparative Genomics 
-# (http://ccg.murdoch.edu.au/).
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, YABI IS PROVIDED TO YOU "AS IS," 
-# WITHOUT WARRANTY. THERE IS NO WARRANTY FOR YABI, EITHER EXPRESSED OR IMPLIED, 
-# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND 
-# FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY RIGHTS. 
-# THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF YABI IS WITH YOU.  SHOULD 
-# YABI PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR
-# OR CORRECTION.
-# 
-# TO THE EXTENT PERMITTED BY APPLICABLE LAWS, OR AS OTHERWISE AGREED TO IN 
-# WRITING NO COPYRIGHT HOLDER IN YABI, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR 
-# REDISTRIBUTE YABI AS PERMITTED IN WRITING, BE LIABLE TO YOU FOR DAMAGES, INCLUDING 
-# ANY GENERAL, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF THE 
-# USE OR INABILITY TO USE YABI (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR 
-# DATA BEING RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES 
-# OR A FAILURE OF YABI TO OPERATE WITH ANY OTHER PROGRAMS), EVEN IF SUCH HOLDER 
-# OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
-# 
-### END COPYRIGHT ###
-# -*- coding: utf-8 -*-
-import FSConnector
-import gevent
-from utils.parsers import *
-from Exceptions import PermissionDenied, InvalidPath, IsADirectory
-from FifoPool import Fifos
-from twisted.internet import protocol
-from twisted.internet import reactor
 import os
-import json
-from utils.parsers import parse_ls
 
-from conf import config
+import gevent
+from twisted.internet import protocol, reactor
+
+import FSConnector
+from yabibe.Exceptions import PermissionDenied, InvalidPath, IsADirectory
+from yabibe.conf import config
+from yabibe.utils.FifoPool import Fifos
+from yabibe.utils.LockQueue import LockQueue
+from yabibe.utils.parsers import *
+
 
 # a list of system environment variables we want to "steal" from the launching environment to pass into our execution environments.
 ENV_CHILD_INHERIT = ['PATH']
@@ -63,9 +35,6 @@ LS_TIME_STYLE = r"+%b %d  %Y"
 
 DEBUG = False
  
-from decorators import conf_retry, call_count
-from LockQueue import LockQueue
-from utils.geventtools import sleep
 
 def convert_filename_to_encoded_for_echo(filename):
     """This function takes a filename, and encodes the whole thing to a back ticked eval command.
@@ -272,7 +241,7 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         pp = LocalShell().mkdir(path)
         
         while not pp.isDone():
-            gevent.sleep()
+            gevent.sleep(1.0)
             
         if priority:
             self.lockqueue.unlock(lock)
@@ -307,7 +276,7 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         pp = LocalShell().rm(path,args="-rf" if recurse else "-f")
         
         while not pp.isDone():
-            gevent.sleep()
+            gevent.sleep(1.0)
         
         err, out = pp.err, pp.out
         
@@ -344,7 +313,7 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         pp = LocalShell().ls(path, recurse=recurse)
         
         while not pp.isDone():
-            gevent.sleep()
+            gevent.sleep(1.0)
             
         # release our queue lock
         if priority:
@@ -388,7 +357,7 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         pp = LocalShell().ln(target, link)
         
         while not pp.isDone():
-            gevent.sleep()
+            gevent.sleep(1.0)
             
         if priority:
             self.lockqueue.unlock(lock)
