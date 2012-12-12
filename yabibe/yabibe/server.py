@@ -1,16 +1,16 @@
 import sys, os, pwd
 
-from reactor import GeventReactor
-from resources.BaseResource import base
 from twisted.application import service, internet
 from twisted.internet import reactor
 from twisted.python import syslog
-from twistedweb2 import log, server, channel
-from yabibe.conf import config
+from twistedweb2 import log, channel, server
 
 from ServerContextFactory import ServerContextFactory
+from conf import config
+from resources.BaseResource import base
+from utils import rm_rf
 
-def server():
+def app():
     #sys.path.append(os.path.dirname(__file__))                  # add our base directory to the pythonpath
     
     #read config
@@ -22,17 +22,16 @@ def server():
     assert config.config['backend'].has_key('hmackey'), "[backend] section of yabi.conf is missing 'hmackey' setting"
     assert config.config['backend']['hmackey'], "[backend] section of yabi.conf has unset 'hmackey' value"
 
-    GeventReactor.install()
-    # for SSL context
-
     # Twisted Application Framework setup:
     application = service.Application('yabibe')
 
-    if config.config['backend']['logfile']:
-        from twisted.python.log import ILogObserver, FileLogObserver
-        from twisted.python.logfile import DailyLogFile
-        logfile = DailyLogFile.fromFullPath(config.config['backend']['logfile'])
-        application.setComponent(ILogObserver, FileLogObserver(logfile).emit)
+    # TODO: make this ADD the logger, not replace it.
+    # we should be able to log to stdout, multiple files AND syslog
+    #if config.config['backend']['logfile']:
+    #    from twisted.python.log import ILogObserver, FileLogObserver
+    #    from twisted.python.logfile import DailyLogFile
+    #    logfile = DailyLogFile.fromFullPath(config.config['backend']['logfile'])
+    #    application.setComponent(ILogObserver, FileLogObserver(logfile).emit)
 
     if "--syslog" in sys.argv:
         # set up twisted logging
@@ -48,7 +47,6 @@ def server():
 
     # Setup default common access logging
     res = log.LogWrapperResource(base)
-
     log.DefaultCommonAccessLoggingObserver().start()
 
     # Create the site and application objects
@@ -64,12 +62,14 @@ def server():
     reactor.addSystemEventTrigger("after", "startup", startup)
     reactor.addSystemEventTrigger("before","shutdown",shutdown)
 
+    return application
+
 def shutdown():
     """We run this before the server shuts down
     """
     # stop TaskManager if its running
     if config.config["taskmanager"]["startup"]:
-        import TaskManager
+        from resources import TaskManager
         TaskManager.shutdown()
 
     # shutdown our connectors
@@ -96,7 +96,7 @@ def startup():
     # setup the TaskManager if we are needed
     if config.config["taskmanager"]["startup"]:
         print "Starting task manager"
-        import TaskManager
+        from resources import TaskManager
         reactor.callLater(0.1,TaskManager.startup) 
     else:
         print "NOT starting task manager"

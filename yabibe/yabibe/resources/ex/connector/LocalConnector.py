@@ -16,7 +16,6 @@ from twistedweb2 import http, responsecode, http_headers, stream
 
 import shlex
 import os
-from yabibe.utils.protocol import globus
 import gevent
 import tempfile
 

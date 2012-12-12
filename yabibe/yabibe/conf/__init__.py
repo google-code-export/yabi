@@ -89,7 +89,13 @@ def path_sanitise(path):
 class Configuration(object):
     """Holds the running configuration for the full yabi stack that is running under this twistd"""
     SECTIONS = ['backend']       # sections of the config file
-    KEYS = ['port','path','start_http','start_https','sslport','logfile']
+    KEYS = { 'port' : port_setting,
+             'path' : path_sanitise,
+             'start_http' : boolean_proc,
+             'start_https' : boolean_proc,
+             'sslport' : port_setting,
+             'logfile' : path_sanitise
+           }
     
     # defaults
     config = {
@@ -171,7 +177,7 @@ class Configuration(object):
                 
                 for key in self.KEYS:
                     if conf_parser.has_option(section,key):
-                        self.config[section][key] = conf_parser.get(section,key)
+                        self.config[section][key] = self.KEYS[key](conf_parser.get(section,key))
         
         # taskmanager section
         name = "taskmanager"
