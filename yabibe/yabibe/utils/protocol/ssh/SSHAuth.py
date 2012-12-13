@@ -1,7 +1,7 @@
 """Encapsulation of globus Authentication proxies as a mixin"""
 import urllib
 
-from yabibe.Exceptions import NoCredentials, AuthException
+from yabibe.exceptions import NoCredentials, AuthException
 from yabibe.conf import config
 from yabibe.utils.geventtools import GETFailure
 

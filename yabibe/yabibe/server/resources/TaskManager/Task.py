@@ -7,7 +7,7 @@ import pickle
 from yabibe.utils.parsers import parse_url
 
 import traceback
-from yabibe.Exceptions import BlockingException
+from yabibe.exceptions import BlockingException
 
 DEBUG = False
 

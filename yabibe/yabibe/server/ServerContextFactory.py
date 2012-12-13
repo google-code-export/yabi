@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from conf import config
+from yabibe.conf import config
 import os
 
 config.read_defaults()

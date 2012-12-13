@@ -6,7 +6,7 @@ from yabibe.utils.LockQueue import LockQueue
 from yabibe.utils.RetryController import SSHRetryController, HARD
 
 import FSConnector
-from yabibe.Exceptions import PermissionDenied, InvalidPath
+from yabibe.exceptions import PermissionDenied, InvalidPath
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh

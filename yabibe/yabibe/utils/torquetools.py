@@ -4,7 +4,7 @@ import os
 import re
 
 import gevent
-from yabibe.resources.ex.connector.ExecConnector import ExecutionError
+from yabibe.connectors.ex.ExecConnector import ExecutionError
 from twisted.internet import protocol, reactor
 
 from yabibe.utils.geventtools import sleep

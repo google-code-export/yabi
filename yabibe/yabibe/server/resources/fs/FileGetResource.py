@@ -7,10 +7,8 @@ from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
 from MimeStreamDecoder import no_intr
-from connector.FSConnector import NotImplemented
-from yabibe.Exceptions import NoCredentials
+from yabibe.exceptions import NoCredentials
 from yabibe.utils.FifoStream import FifoStream
-from yabibe.utils.decorators import hmac_authenticated
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTData
 
@@ -19,8 +17,11 @@ DEFAULT_GET_PRIORITY = 1
 
 DOWNLOAD_BLOCK_SIZE = 8192
 
-class FileCompressGetResource(resource.PostableResource):
+class FileGetResource(resource.PostableResource):
     VERSION=0.1
+    
+    # all the kenames that compose credentials for both src and dst
+    KEYSET =    [ 'key','password','username','cert' ]
     
     def __init__(self,request=None, path=None, fsresource=None):
         """Pass in the backends to be served out by this FSResource"""
@@ -30,31 +31,11 @@ class FileCompressGetResource(resource.PostableResource):
             raise Exception, "FileGetResource must be informed on construction as to which FSResource is its parent"
         
         self.fsresource = weakref.ref(fsresource)
-        
-    @hmac_authenticated
-    def handle_compress_get(self, request):
-        # override default priority
-        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_GET_PRIORITY
-        
-        if "uri" not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
-
-        uri = request.args['uri'][0]
-        yabiusername = request.args['yabiusername'][0] if 'yabiusername' in request.args else None
+    
+    def get(self,uri, yabiusername=None, creds={}, priority=0):
         scheme, address = parse_url(uri)
-        
-        # compile any credentials together to pass to backend
-        creds={}
-        for varname in ['key','password','username','cert']:
-            if varname in request.args:
-                creds[varname] = request.args[varname][0]
-                del request.args[varname]
-        
-        # how many bytes to truncate the GET at
-        #bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
-        
         if not hasattr(address,"username"):
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
+            raise Exception, "No username provided in uri"
         
         username = address.username
         path = address.path
@@ -66,17 +47,41 @@ class FileCompressGetResource(resource.PostableResource):
         # get the backend
         fsresource = self.fsresource()
         if scheme not in fsresource.Backends():
-            return http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, "Backend '%s' not found\n"%scheme)
+            raise Exception, "Backend '%s' not found\n"%scheme
             
         bend = self.fsresource().GetBackend(scheme)
+        
+        # returns ( procproto object, fifo filename )
+        return bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds)
+        
+    def handle_get(self, uri, bytes=None, **kwargs):
+        creds = {}
+        yabiusername = None
+        bytes_to_read = bytes
+        
+        if 'yabiusername' not in kwargs:
+            for keyname in self.KEYSET:
+                assert keyname in kwargs, "credentials not passed in correctly"
+                
+            # compile any credentials together to pass to backend
+            for keyname in self.KEYSET:
+                print "k",keyname
+                if keyname in kwargs:
+                    if keyname not in creds:
+                        creds[keyname]={}
+                    creds[keyname] = kwargs[keyname]
+        
+            print "creds",creds
+        else:
+            yabiusername = kwargs['yabiusername']
         
         # our client channel
         client_channel = defer.Deferred()
         
-        def compress_tasklet(req, channel):
+        def download_tasklet(channel):
             """Tasklet to do file download"""
             try:
-                procproto, fifo = bend.GetCompressedReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds, priority=priority)
+                procproto, fifo = self.get(uri,yabiusername=yabiusername,creds=creds,priority=0)
                 
                 def fifo_cleanup(response):
                     os.unlink(fifo)
@@ -86,10 +91,9 @@ class FileCompressGetResource(resource.PostableResource):
             except NoCredentials, nc:
                 print traceback.format_exc()
                 return channel.callback(http.Response( responsecode.UNAUTHORIZED, {'content-type': http_headers.MimeType('text', 'plain')}, str(nc) ))
-            
-            except NotImplemented, ni:
+            except Exception, exc:
                 print traceback.format_exc()
-                return channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, "This backend does not support compressed get\n" ))
+                return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(exc) ))
             
             # give the engine a chance to fire up the process
             while not procproto.isStarted():
@@ -115,7 +119,7 @@ class FileCompressGetResource(resource.PostableResource):
                     if len(data):
                         # we have data
                         if not datastream:
-                            datastream = FifoStream(file)
+                            datastream = FifoStream(file, truncate=bytes_to_read)
                             datastream.prepush(data)
                             return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
                     else:
@@ -126,7 +130,7 @@ class FileCompressGetResource(resource.PostableResource):
                         while not procproto.isDone():
                             data = no_intr(file.read,DOWNLOAD_BLOCK_SIZE)
                             if len(data):
-                                datastream = FifoStream(file)
+                                datastream = FifoStream(file, truncate=bytes_to_read)
                                 datastream.prepush(data)
                                 return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
                             gevent.sleep(0.1)
@@ -135,7 +139,7 @@ class FileCompressGetResource(resource.PostableResource):
                             return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Get failed: %s\n"%procproto.err ))
                         else:
                             # transfer the file
-                            datastream = FifoStream(file)
+                            datastream = FifoStream(file, truncate=bytes_to_read)
                             return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
                     
                 gevent.sleep()
@@ -143,9 +147,41 @@ class FileCompressGetResource(resource.PostableResource):
             return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Catastrophic codepath violation. This error should never happen. It's a bug!" ))
 
         
-        tasklet = gevent.spawn(compress_tasklet, request, client_channel )
+        tasklet = gevent.spawn(download_tasklet, client_channel )
         
         return client_channel
+        
+        
+    #@hmac_authenticated
+    def handle_get_request(self, request):
+        # override default priority
+        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_GET_PRIORITY
+        
+        if "uri" not in request.args:
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
+
+        uri = request.args['uri'][0]
+        yabiusername = request.args['yabiusername'][0] if 'yabiusername' in request.args else None
+        
+        # how many bytes to truncate the GET at
+        bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
+        
+        if "yabiusername" in request.args:
+            print "YABIUSERNAME"
+            yabiusername = request.args['yabiusername'][0]
+            return self.handle_get( uri, bytes_to_read, yabiusername=yabiusername )
+        elif False not in [(X in request.args) for X in self.KEYSET]:
+            # all the other keys are present
+            print "KEYS"
+            keyvals = dict( [ (keyname,request.args[keyname][0]) for keyname in self.KEYSET ] )
+            print "keyvals",keyvals
+            return self.handle_get( uri, bytes_to_read, **keyvals)
+                                        
+        # fall through = error
+        print "FALLTHROUGH"
+        return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, 
+            "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
+        )
     
     def http_POST(self, request):
         """
@@ -158,7 +194,7 @@ class FileCompressGetResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_compress_get(request)
+            return self.handle_get_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -166,5 +202,5 @@ class FileCompressGetResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_compress_get(request)
+        return self.handle_get_request(request)
    

@@ -3,7 +3,7 @@ from mock import MagicMock, patch
 import os
 import StringIO
 
-from yabibe.conf import parse_url, port_setting, email_setting, ConfigError, Configuration
+from yabibe.conf import parse_url, port_setting_parser, time_parser, email_setting_parser, ConfigError, Configuration
             
 def debug(*args, **kwargs):
     import sys
@@ -11,6 +11,13 @@ def debug(*args, **kwargs):
 
 class ConfTestSuite(unittest.TestCase):
     """Test yabibe.conf"""
+    def _make_conf(self,conf):
+        output = []
+        for key in conf:
+            output.append('[%s]'%key)
+            for subkey in conf[key]:
+                output.append('%s: %s'%(subkey,conf[key][subkey]))
+        return '\n'.join(output)+'\n'
 
     def setUp(self):
         pass
@@ -47,15 +54,22 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals(data.username, 'username')
         self.assertEquals(data.password, 'password')
 
+    def test_time_parser(self):
+        # test integers and floats
+        self.assertEquals(time_parser(10), 10)
+        self.assertEquals(time_parser("100"), 100)
+        self.assertEquals(time_parser(1000.000), 1000)
+        self.assertEquals(time_parser("1000.4"), 1000.4)
+
     def test_port_settings(self):
-        self.assertEquals(port_setting('8000'), ('0.0.0.0', 8000))
-        self.assertEquals(port_setting('127.0.0.1'), ('127.0.0.1', 8000))
-        self.assertEquals(port_setting('10.0.0.1:80'), ('10.0.0.1',80))
+        self.assertEquals(port_setting_parser('8000'), ('0.0.0.0', 8000))
+        self.assertEquals(port_setting_parser('127.0.0.1'), ('127.0.0.1', 8000))
+        self.assertEquals(port_setting_parser('10.0.0.1:80'), ('10.0.0.1',80))
 
         # check malformed port
         self.assertRaises(
             ConfigError,
-            port_setting,
+            port_setting_parser,
             'blah'
         )
 
@@ -68,7 +82,7 @@ class ConfTestSuite(unittest.TestCase):
         ]
 
         for string, name, email in email_conversions:
-            cname, cemail = email_setting(string)
+            cname, cemail = email_setting_parser(string)
             self.assertEquals(name,cname)
             self.assertEquals(email,cemail)
 
@@ -99,8 +113,29 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals( c.config['backend']['hmackey'], test_hmac_key )
 
     def test_Configuration_read_every_section(self):
-        test_conf = "[backend]\n[taskmanager]\n[ssh+sge]\n[execution]\n"
+        test_conf = self._make_conf( {'backend': { 'path':'test_path'},
+                                      'taskmanager': { 'polldelay': '10'},
+                                      'ssh+sge': { 'qstat':'foo'},
+                                      'execution':{ 'logcommand': 'true'}
+                                     } )
 
         c = Configuration()
         c.read_from_data(test_conf)
+
+        self.assertEquals( c.config['backend']['path'], 'test_path' )
+        self.assertEquals( c.config['taskmanager']['polldelay'], 10  )
+        self.assertEquals( c.config['ssh+sge']['qstat'], 'foo' )
+        self.assertEquals( c.config['execution']['logcommand'], True )
+        
+    def test_Configuration_read_sections_missing(self):
+        test_conf = self._make_conf( {'backend': { 'path':'test_path'},
+                                      'taskmanager': { 'polldelay': 10 },
+                                     } )
+
+        c = Configuration()
+        c.read_from_data(test_conf)
+
+        self.assertEquals( c.config['backend']['path'], 'test_path' )
+        self.assertEquals( c.config['taskmanager']['polldelay'], 10 )
+
         

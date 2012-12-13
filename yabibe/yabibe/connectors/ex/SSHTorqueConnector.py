@@ -5,7 +5,8 @@ import uuid
 import gevent
 from twistedweb2 import http, responsecode, http_headers, stream
 
-from ExecConnector import ExecConnector, ExecutionError
+from yabibe.exceptions import ExecutionError
+from ExecConnector import ExecConnactor
 from yabibe.conf import config
 from yabibe.resources.TaskManager.TaskTools import RemoteInfo
 from yabibe.utils.decorators import conf_retry

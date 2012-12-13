@@ -4,7 +4,7 @@ from boto.s3.connection import S3Connection, OrdinaryCallingFormat
 from boto.s3.key import Key
 
 import FSConnector
-from yabibe.Exceptions import InvalidPath
+from yabibe.exceptions import InvalidPath
 from yabibe.utils.protocol import s3
 from yabibe.utils.protocol.s3 import s3utils
 
