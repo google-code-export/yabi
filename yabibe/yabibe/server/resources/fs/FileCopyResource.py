@@ -3,7 +3,7 @@ import traceback
 import weakref, json
 import gevent
 
-from yabibe.Exceptions import BlockingException
+from yabibe.exceptions import BlockingException
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 from yabibe.utils.decorators import hmac_authenticated

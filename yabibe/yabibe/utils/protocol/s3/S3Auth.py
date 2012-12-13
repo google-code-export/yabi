@@ -2,7 +2,7 @@
 
 from yabibe.utils.geventtools import RetryGET, GETFailure, sleep
 import json, os
-from yabibe.Exceptions import NoCredentials, AuthException
+from yabibe.exceptions import NoCredentials, AuthException
 from yabibe.conf import config
 import urllib
 

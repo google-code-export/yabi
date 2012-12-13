@@ -4,7 +4,7 @@ import gevent
 from twisted.internet import protocol, reactor
 
 import FSConnector
-from yabibe.Exceptions import PermissionDenied, InvalidPath, IsADirectory
+from yabibe.exceptions import PermissionDenied, InvalidPath, IsADirectory
 from yabibe.conf import config
 from yabibe.utils.FifoPool import Fifos
 from yabibe.utils.LockQueue import LockQueue

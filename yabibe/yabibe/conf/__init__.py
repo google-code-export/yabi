@@ -57,7 +57,7 @@ SEARCH_PATH = ["~/.yabi/yabi.conf","~/.yabi/backend/yabi.conf","~/yabi.conf","~/
 ##
 ## Support functions that do some text processing
 ##
-def port_setting(port):
+def port_setting_parser(port):
     """returns ip,port or raises exception if error"""
     re_port = re.compile(r'^(\d+\.\d+\.\d+\.\d+)(:\d+)?$')
     result = re_port.search(port)
@@ -68,79 +68,156 @@ def port_setting(port):
     try:
         return '0.0.0.0',int(port)
     except ValueError, ve:
-        raise ConfigError, "malformed IP:port setting"
+        raise ConfigError("malformed IP:port setting")
 
-def email_setting(email):
+def email_setting_parser(email):
     """process an email of the form "First Last <email@server.com>" into name and email.
     also handle just plain email address with no name
     """
     import rfc822
     return rfc822.parseaddr(email)
 
-# process boolean string into python boolean type
-boolean_proc = lambda x: x if type(x) is bool else x.lower()=="true" or x.lower()=="t" or x.lower()=="yes" or x.lower()=="y"
+def boolean_parser(x):
+    return x if type(x) is bool else x.lower()=="true" or x.lower()=="t" or x.lower()=="yes" or x.lower()=="y"
 
-def path_sanitise(path):
+def path_parser(path):
     return os.path.normpath(os.path.expanduser(path))
+
+def string_parser(s):
+    return str(s)
+
+def syslog_facility_parser(s):
+    return syslog_facilities[s]
+
+def url_parser(url):
+    return urlparse.urlunparse(urlparse.urlparse(url))
+
+def time_parser(t):
+    "parses time and returns as seconds as a float"
+    if type(t) in (int, float):
+        return float(t)
+
+    # see if we can just float it
+    try:
+        return float(t)
+    except ValueError, e:
+        pass
+
+    import re
+    # handle HH:MM:SS
+    if type(t) in (str, unicode):
+        if re.match('\d+:\d+:\d+',t):
+            h,m,s = [int(n) for n in t.split(':')]
+            return float(h*3600 + m*60 + s)
+
+    # handle XXhXXmXXs types
+    if type(t) in (str, unicode) and len(t):
+        match = re.match('(\d+h)*(\d+m)*(\d+s)*',t)
+        h,m,s = [int(match.group(n)) if match.group(n) else 0 for n in range(3)]
+
+        # the following is zero if the string is something like "bogus time"
+        if h+m+s:
+            return float(h*3600 + m*60 + s)
+
+    raise ValueError("The value %r cannot be parsed as time"%t)
 
 ##
 ## The Configuration store.
 ##
 class Configuration(object):
     """Holds the running configuration for the full yabi stack that is running under this twistd"""
-    SECTIONS = ['backend']       # sections of the config file
-    KEYS = { 'port' : port_setting,
-             'path' : path_sanitise,
-             'start_http' : boolean_proc,
-             'start_https' : boolean_proc,
-             'sslport' : port_setting,
-             'logfile' : path_sanitise
-           }
-    
+    # how to handle the values in the config file.
+    converters = {
+        'backend': {
+            'port': port_setting_parser,
+            'start_http' : boolean_parser,
+            
+            'start_https' : boolean_parser,
+            'sslport' : port_setting_parser,
+
+            'path': path_parser,
+
+            'fifos': path_parser,
+            'tasklets': path_parser,
+            'certificates': path_parser,
+            'temp': path_parser,
+
+            'certfile': path_parser,
+            'keyfile': path_parser,
+
+            'hmackey': string_parser,
+
+            'admin': url_parser,
+            'admin_cert_check': boolean_parser,
+
+            'source': string_parser,
+            'runningdir': string_parser,
+            'pidfile': string_parser,
+            'logfile': string_parser,
+
+            'syslog_facility': syslog_facility_parser,
+            'syslog_prefix': string_parser,
+            
+            'debug': boolean_parser,
+        },
+        'taskmanager': {
+            'polldelay': time_parser,
+            'startup': boolean_parser,
+            'tasktag': string_parser,
+            'retrywindow': time_parser
+        },
+        'execution': {
+            'logcommand': boolean_parser,
+            'logscripts': boolean_parser,
+        },
+        'ssh+sge': {
+            'qstat': path_parser,
+            'qsub': path_parser,
+            'qacct': path_parser
+        }
+    }
+     
     # defaults
     config = {
         'backend':  {
-                        "port":"0.0.0.0:8000",
-                        "start_http":"true",
-                        
-                        "sslport":"0.0.0.0:8443",
-                        "start_https":"false",
-                        
-                        "path":"/",
-                                                
-                        "telnet":"false",
-                        "telnet_port":"0.0.0.0:8021",
-                        
-                        "fifos":None,
-                        "tasklets":None,
-                        "certificates":None,
-                        
-                        "certfile":"~/.yabi/servercert.pem",
-                        "keyfile":"~/.yabi/servercert.pem",
-                        
-                        "hmackey":None,
-                        
-                        "admin":None,
-                        "admin_cert_check":True,
-                        
-                        "syslog_facility":syslog.LOG_DAEMON,
-                        "syslog_prefix":r"YABI [yabibe:%(username)s]",
-                    },
+            "port":"0.0.0.0:8000",
+            "start_http":"true",
+            
+            "sslport":"0.0.0.0:8443",
+            "start_https":"false",
+            
+            "path":"/",
+            
+            "fifos":None,
+            "tasklets":None,
+            "certificates":None,
+            
+            "certfile":"~/.yabi/servercert.pem",
+            "keyfile":"~/.yabi/servercert.pem",
+            
+            "hmackey":None,
+            
+            "admin":None,
+            "admin_cert_check":True,
+            
+            "syslog_facility":syslog.LOG_DAEMON,
+            "syslog_prefix":r"YABI [yabibe:%(username)s]",
+        },
         'taskmanager':{
-                        'polldelay':'5',
-                        'startup':'true',
-                        "tasktag":None,
-                        "retrywindow":60,           # default is to retry for 1 minute. This is for dev and testing. production should up this value.
-                    },
+            'polldelay':'5',
+            'startup':'true',
+            "tasktag":None,
+            "retrywindow":60,           # default is to retry for 1 minute. This is for dev and testing. production should up this value.
+        },
         'ssh+sge':{
-                        'qstat':'qstat',
-                        'qsub':'qsub',
-                        'qacct':'qacct',
-                    },
+            'qstat':'qstat',
+            'qsub':'qsub',
+            'qacct':'qacct',
+        },
         'execution':{
-                        'logcommand':'true',
-                        'logscripts':'true'
-                    },
+            'logcommand':'true',
+            'logscripts':'true'
+        },
     }
 
     def read_defaults(self):
@@ -168,47 +245,17 @@ class Configuration(object):
         conf_parser.readfp(fp)
         
         # main sections
-        for section in self.SECTIONS:
+        for section in self.converters:
             if conf_parser.has_section(section):
                 # process section
                 
                 if section not in self.config:
                     self.config[section] = {}
                 
-                for key in self.KEYS:
+                for key in self.converters[section]:
                     if conf_parser.has_option(section,key):
-                        self.config[section][key] = self.KEYS[key](conf_parser.get(section,key))
+                        self.config[section][key] = self.converters[section][key](conf_parser.get(section,key))
         
-        # taskmanager section
-        name = "taskmanager"
-        self._conditional_parse_get(conf_parser, name, 'polldelay')
-        self._conditional_parse_get(conf_parser, name, 'startup', boolean_proc ) 
-        self._conditional_parse_get(conf_parser, name, 'tasktag')
-        self._conditional_parse_get(conf_parser, name, 'retrywindow')
-                                    
-        # ssh+sge section
-        name = "sge+ssh"
-        for key in ('qstat','qsub','qacct'):
-            self._conditional_parse_get(conf_parser, name, key)
-        
-        # execution section
-        name = "execution"
-        for key in ('logcommand','logscripts'):
-            self._conditional_parse_get(conf_parser, name, key, boolean_proc )
-             
-        # backend section
-        name = "backend"
-        
-        for key in ('fifos','tasklets','certificates','temp','keyfile','certfile'):
-            self._conditional_parse_get(conf_parser, name, key, path_sanitise)
-
-        for key in ('admin','hmackey'):
-            self._conditional_parse_get(conf_parser, name, key)
-
-        self._conditional_parse_get(conf_parser, name, 'syslog_prefix', lambda x: x.replace('{',r'%(').replace('}',')s') )
-        self._conditional_parse_get(conf_parser, name, 'syslog_facility', lambda x: syslog_facilities[x.upper()] )
-        self._conditional_parse_get(conf_parser, name, 'admin_cert_check', boolean_proc )
-
     def read_config(self, search=SEARCH_PATH):
         for part in search:
             self.read_from_file(os.path.expanduser(part))

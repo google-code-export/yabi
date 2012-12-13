@@ -6,7 +6,8 @@ import gevent
 from twisted.python import log
 from twistedweb2 import http, responsecode, http_headers, stream
 
-from ExecConnector import ExecConnector, ExecutionError
+from yabibe.exceptions import ExecutionError
+from ExecConnector import ExecConnactor
 from SubmissionTemplate import make_script
 from yabibe.conf import config
 from yabibe.resources.TaskManager.TaskTools import RemoteInfo

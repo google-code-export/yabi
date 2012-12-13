@@ -5,21 +5,15 @@ import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
-from yabibe.Exceptions import PermissionDenied, InvalidPath, BlockingException, NoCredentials, ProxyInitError
+from yabibe.exceptions import PermissionDenied, InvalidPath, BlockingException, NoCredentials, ProxyInitError
 from yabibe.utils.decorators import hmac_authenticated
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTData
 
 
-DEFAULT_DELETE_PRIORITY = 2                         
+DEFAULT_LINK_PRIORITY = 10
 
-# print out extra debug information to the log
-DEBUG = False
-
-# diable the rm function (can be helpful during debug)
-DISABLED = False
-
-class FileDeleteResource(resource.PostableResource):
+class FileLinkResource(resource.PostableResource):
     VERSION=0.1
     maxMem = 100*1024
     maxFields = 16
@@ -30,23 +24,25 @@ class FileDeleteResource(resource.PostableResource):
         self.path = path
         
         if not fsresource:
-            raise Exception, "FileListResource must be informed on construction as to which FSResource is its parent"
+            raise Exception, "FileLinkResource must be informed on construction as to which FSResource is its parent"
         
         self.fsresource = weakref.ref(fsresource)
-    
+        
     @hmac_authenticated
-    def handle_delete_request(self, request):
+    def handle_link_request(self, request):
         # override default priority
-        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_DELETE_PRIORITY
-        
-        if "uri" not in request.args:
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No uri provided\n")
+        priority = int(request.args['priority'][0]) if "priority" in request.args else DEFAULT_LINK_PRIORITY
 
-        uri = request.args['uri'][0]
-        scheme, address = parse_url(uri)
+        if 'target' not in request.args:
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link must specify a directory 'target' to link to\n")
         
-        if not hasattr(address,"username"):
-            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "No username provided in uri\n")
+        if 'link' not in request.args:
+            return http.Response( responsecode.BAD_REQUEST, {'content-type': http_headers.MimeType('text', 'plain')}, "link must specify a directory 'link' parameter\n")
+        
+        targeturi = request.args['target'][0]
+        targetscheme, targetaddress = parse_url(targeturi)
+        linkuri = request.args['link'][0]
+        linkscheme, linkaddress = parse_url(linkuri)
         
         # compile any credentials together to pass to backend
         creds={}
@@ -54,38 +50,33 @@ class FileDeleteResource(resource.PostableResource):
             if varname in request.args:
                 creds[varname] = request.args[varname][0]
                 del request.args[varname]
-        
+    
         yabiusername = request.args['yabiusername'][0] if "yabiusername" in request.args else None
         
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         
-        recurse = 'recurse' in request.args
-        
         # our client channel
         client_channel = defer.Deferred()
         
-        def do_rm():
-            if DEBUG:
-                print "DO_RM hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
+        def do_ln():
+            #print "LN hostname=",hostname,"path=",targetaddress.path,"username=",username
             try:
-                # if delete function is not disabled (for DEBUG purposes)
-                deleter=self.fsresource().rm(uri,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
+                linker=self.fsresource().link(target=targeturi,link=linkuri, yabiusername=yabiusername, creds=creds, priority=priority)
                 client_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "OK\n"))
-            except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
-                print traceback.format_exc()
-                #print "rm call failed...\n%s"%traceback.format_exc()
-                client_channel.callback(http.Response( responsecode.FORBIDDEN, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
             except BlockingException, be:
                 print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(be)))
-            except Exception, exception:
+            except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()
-                client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))    
+                client_channel.callback(http.Response( responsecode.FORBIDDEN, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
+            except Exception, e:
+                print traceback.format_exc()
+                client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(e)))
             
-        tasklet = gevent.spawn(do_rm)
+        tasklet = gevent.spawn(do_ln)
         
         return client_channel
-
+    
     def http_POST(self, request):
         """
         Respond to a POST request.
@@ -97,7 +88,7 @@ class FileDeleteResource(resource.PostableResource):
         deferred = parsePOSTData(request)
         
         def post_parsed(result):
-            return self.handle_delete_request(request)
+            return self.handle_link_request(request)
         
         deferred.addCallback(post_parsed)
         deferred.addErrback(lambda res: http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Job Submission Failed %s\n"%res) )
@@ -105,5 +96,5 @@ class FileDeleteResource(resource.PostableResource):
         return deferred
 
     def http_GET(self, request):
-        return self.handle_delete_request(request)
-
+        return self.handle_link_request(request)
+    

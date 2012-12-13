@@ -17,7 +17,7 @@ import gevent
 
 from CallbackHTTPClient import CallbackHTTPClient, CallbackHTTPClientFactory, CallbackHTTPDownloader
 from RememberingHTTPClient import RememberingHTTPClient, RememberingHTTPClientFactory, RememberingHTTPDownloader
-from yabibe.ServerContextFactory import ServerContextFactory
+from yabibe.server.ServerContextFactory import ServerContextFactory
 
 DEBUG = False
 
