@@ -43,15 +43,6 @@ syslog_facilities = {
 class ConfigError(Exception):
     pass
 
-def parse_url(uri):
-    """Parse a url via the inbuilt urlparse. But this is slightly different
-    as it can handle non-standard schemas. returns the schema and then the
-    tuple from urlparse"""
-    uri = uri.strip()
-    scheme, rest = uri.split(":",1)
-    assert re_url_schema.match(scheme)
-    return scheme, urlparse.urlparse(rest)
-
 SEARCH_PATH = ["~/.yabi/yabi.conf","~/.yabi/backend/yabi.conf","~/yabi.conf","~/.yabi","/etc/yabi.conf","/etc/yabi/yabi.conf"]
 
 ##
@@ -100,7 +91,7 @@ def time_parser(t):
     # see if we can just float it
     try:
         return float(t)
-    except ValueError, e:
+    except (TypeError, ValueError), e:
         pass
 
     import re
@@ -110,16 +101,16 @@ def time_parser(t):
             h,m,s = [int(n) for n in t.split(':')]
             return float(h*3600 + m*60 + s)
 
-    # handle XXhXXmXXs types
-    if type(t) in (str, unicode) and len(t):
-        match = re.match('(\d+h)*(\d+m)*(\d+s)*',t)
-        h,m,s = [int(match.group(n)) if match.group(n) else 0 for n in range(3)]
+        # handle XXhXXmXXs types
+        if len(t):
+            match = re.match('(\d+h)*(\d+m)*(\d+s)*',t)
+            h,m,s = [int(match.group(n+1)[:-1]) if match.group(n+1) else 0 for n in range(3)]
 
-        # the following is zero if the string is something like "bogus time"
-        if h+m+s:
-            return float(h*3600 + m*60 + s)
+            # the following is zero if the string is something like "bogus time"
+            if h+m+s:
+                return float(h*3600. + m*60. + s)
 
-    raise ValueError("The value %r cannot be parsed as time"%t)
+    raise ConfigError("The value %r cannot be parsed as time"%t)
 
 ##
 ## The Configuration store.
@@ -228,7 +219,7 @@ class Configuration(object):
         self.read_from_fp(StringIO.StringIO(dat))
         
     def read_from_file(self,filename):
-        self.read_from_fp(open(filename)) if os.path.exists(filename) and os.path.isfile(filename) else None
+        self.read_from_fp(open(filename)) 
 
     def _conditional_parse_get(self, parser, name, key, proc = None):
         """if the config block has section [name] with key 'key', set it in the config dictionary
@@ -246,19 +237,17 @@ class Configuration(object):
         
         # main sections
         for section in self.converters:
-            if conf_parser.has_section(section):
-                # process section
-                
-                if section not in self.config:
-                    self.config[section] = {}
-                
-                for key in self.converters[section]:
-                    if conf_parser.has_option(section,key):
-                        self.config[section][key] = self.converters[section][key](conf_parser.get(section,key))
-        
+            for key in self.converters[section]:
+                self._conditional_parse_get(conf_parser, section, key, self.converters[section][key])
+            
     def read_config(self, search=SEARCH_PATH):
         for part in search:
-            self.read_from_file(os.path.expanduser(part))
+            path = os.path.expanduser(part)
+            if os.path.exists(path) and os.path.isfile(path):
+                return self.read_from_file(path)
+
+        # config not founf
+        raise IOError("config file not found")
             
     def get_section_conf(self,section):
         return self.config[section]

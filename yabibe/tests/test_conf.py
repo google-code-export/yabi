@@ -3,7 +3,7 @@ from mock import MagicMock, patch
 import os
 import StringIO
 
-from yabibe.conf import parse_url, port_setting_parser, time_parser, email_setting_parser, ConfigError, Configuration
+from yabibe.conf import url_parser, port_setting_parser, time_parser, email_setting_parser, ConfigError, Configuration
             
 def debug(*args, **kwargs):
     import sys
@@ -27,40 +27,63 @@ class ConfTestSuite(unittest.TestCase):
         
     def test_parse_url(self):
         """test that yabi.conf.parse_url works"""
-        scheme,data = parse_url('http://www.google.com/path/to/file')
+        urls = [
+            'http://www.google.com/',
+            'https://www.google.com:8000',
+            'http://127.0.0.1:70/path/to/resource?get=param'
+        ]
 
-        self.assertEquals(scheme, 'http')
-        self.assertEquals(data.scheme, '')
-        self.assertEquals(data.netloc, 'www.google.com')
-        self.assertEquals(data.path, '/path/to/file')
-        self.assertEquals(data.params, '')
-        self.assertEquals(data.query, '')
-        self.assertEquals(data.fragment, '')
-        
-    def test_parse_url_non_supported_scheme(self):
-        """test that parse_url works with wierd schemes"""
-        scheme,data = parse_url('hotpockets://bogus.url:9999/path/to/file?bigcheese=12&littlecheese=skinny+mouse')
-
-        self.assertEquals(scheme, 'hotpockets')
-        self.assertEquals(data.netloc, 'bogus.url:9999')
-        self.assertEquals(data.path, '/path/to/file')
-        self.assertEquals(data.query, 'bigcheese=12&littlecheese=skinny+mouse')
-
-    def test_parse_url_params(self):
-        scheme,data = parse_url('hotpockets://username@bogus.url:9999/')
-        self.assertEquals(data.username, 'username')
-
-        scheme,data = parse_url('hotpockets://username:password@bogus.url:9999/')
-        self.assertEquals(data.username, 'username')
-        self.assertEquals(data.password, 'password')
+        for url in urls:
+            print url
+            self.assertEquals( url_parser(url), url )
 
     def test_time_parser(self):
-        # test integers and floats
-        self.assertEquals(time_parser(10), 10)
-        self.assertEquals(time_parser("100"), 100)
-        self.assertEquals(time_parser(1000.000), 1000)
-        self.assertEquals(time_parser("1000.4"), 1000.4)
+        input_response = [
+            # test integers and floats
+            (10,10),
+            ("100",100),
+            (1000.0, 1000.0),
+            ("1000.4",1000.4),
 
+            # HH:MM:SS
+            ("10:10:10", 10*3600+10*60+10),
+            ("0:3:2", 3*60+2),
+            ("0:0:10", 10),
+            ("100:100:100", 366100),
+
+            # XXhXXmXXs
+            ("10h", 36000),
+            ("10m", 600),
+            ("10s", 10),
+            ("10h5s", 36005),
+            ("10m5s",605),
+            ("10h3m",36180),
+            ("100h100m100s", 366100)
+        ]
+
+        for inp,resp in input_response:
+            # test integers and floats
+            self.assertEquals(time_parser(inp), resp)
+
+        # different ways of getting a ValueError
+        self.assertRaises(
+            ConfigError,
+            time_parser,
+            object()
+        )
+
+        self.assertRaises(
+            ConfigError,
+            time_parser,
+            "Unknown Time String"
+        )
+
+        self.assertRaises(
+            ConfigError,
+            time_parser,
+            ""
+        )       
+        
     def test_port_settings(self):
         self.assertEquals(port_setting_parser('8000'), ('0.0.0.0', 8000))
         self.assertEquals(port_setting_parser('127.0.0.1'), ('127.0.0.1', 8000))
@@ -138,4 +161,34 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals( c.config['backend']['path'], 'test_path' )
         self.assertEquals( c.config['taskmanager']['polldelay'], 10 )
 
+    def test_Configuration_proc_is_None(self):
+        c = Configuration()
+        c.converters['backend']['temp'] = None
+
+        # now lets try and read a conf with this setting
+        test_conf = self._make_conf( {'backend': { 'temp': 'somestring' }} )
+        c.read_from_data(test_conf)
+
+        self.assertEquals( c.config['backend']['temp'], 'somestring' )
+
+    def test_read_config_with_nonexisting_searchpath(self):
+        """test that search path works to find config file"""
+        search_path_falsies = ['/notexist','/home/bah','/home','/usr']
+        c = Configuration()
         
+        self.assertRaises(
+            IOError,
+            c.read_config,
+            search_path_falsies
+        )
+
+    def test_read_from_file_thats_missing(self):
+        missing = "/bdfb/df/bfd/b/fd/fdbfdb.conf"
+        c = Configuration()
+        
+        self.assertRaises(
+            IOError,
+            c.read_from_file,
+            missing
+        )
+            
