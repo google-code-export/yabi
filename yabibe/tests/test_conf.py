@@ -1,6 +1,7 @@
 import unittest2 as unittest
 from mock import MagicMock, patch
 import os
+import tempfile
 import StringIO
 
 from yabibe.conf import url_parser, port_setting_parser, time_parser, email_setting_parser, ConfigError, Configuration
@@ -9,16 +10,31 @@ def debug(*args, **kwargs):
     import sys
     sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
+def make_conf(conf):
+    output = []
+    for key in conf:
+        output.append('[%s]'%key)
+        for subkey in conf[key]:
+            output.append('%s: %s'%(subkey,conf[key][subkey]))
+    return '\n'.join(output)+'\n'
+
+class write_config(object):
+    def __init__(self, conf):
+        self.conf = conf
+        
+    def __enter__(self):
+        self.tempfile = tempfile.NamedTemporaryFile().name
+        with open(self.tempfile,'w') as fh:
+            fh.write(make_conf(self.conf))
+        
+        return self.tempfile
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        os.unlink(self.tempfile)
+        
+
 class ConfTestSuite(unittest.TestCase):
     """Test yabibe.conf"""
-    def _make_conf(self,conf):
-        output = []
-        for key in conf:
-            output.append('[%s]'%key)
-            for subkey in conf[key]:
-                output.append('%s: %s'%(subkey,conf[key][subkey]))
-        return '\n'.join(output)+'\n'
-
     def setUp(self):
         pass
     
@@ -112,6 +128,9 @@ class ConfTestSuite(unittest.TestCase):
     def test_Configuration_instantiate(self):
         Configuration()
 
+    def test_Configuration_created_blank(self):
+        self.assertEquals(Configuration().config, {})
+
     def test_Configuration_read_defaults(self):
         Configuration().read_defaults()
         
@@ -136,7 +155,7 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals( c.config['backend']['hmackey'], test_hmac_key )
 
     def test_Configuration_read_every_section(self):
-        test_conf = self._make_conf( {'backend': { 'path':'test_path'},
+        test_conf = make_conf( {'backend': { 'path':'test_path'},
                                       'taskmanager': { 'polldelay': '10'},
                                       'ssh+sge': { 'qstat':'foo'},
                                       'execution':{ 'logcommand': 'true'}
@@ -151,7 +170,7 @@ class ConfTestSuite(unittest.TestCase):
         self.assertEquals( c.config['execution']['logcommand'], True )
         
     def test_Configuration_read_sections_missing(self):
-        test_conf = self._make_conf( {'backend': { 'path':'test_path'},
+        test_conf = make_conf( {'backend': { 'path':'test_path'},
                                       'taskmanager': { 'polldelay': 10 },
                                      } )
 
@@ -166,7 +185,7 @@ class ConfTestSuite(unittest.TestCase):
         c.converters['backend']['temp'] = None
 
         # now lets try and read a conf with this setting
-        test_conf = self._make_conf( {'backend': { 'temp': 'somestring' }} )
+        test_conf = make_conf( {'backend': { 'temp': 'somestring' }} )
         c.read_from_data(test_conf)
 
         self.assertEquals( c.config['backend']['temp'], 'somestring' )
@@ -191,4 +210,93 @@ class ConfTestSuite(unittest.TestCase):
             c.read_from_file,
             missing
         )
-            
+
+    def test_read_until_path_exists_and_then_no_further(self):
+        with write_config({'backend': { 'path':'test_path'}}) as conf1:
+            with write_config({'backend': { 'path':'overwritten'}}) as conf2:
+                print conf1, conf2
+                c = Configuration()
+                c.read_config( ("/missing/file",conf1,conf2,"/another/missing") )
+
+                self.assertEquals(c.config['backend']['path'], 'test_path')
+
+    def test_get_section_conf(self):
+        test_conf = make_conf( {'backend': { 'path':'test_path'},
+                                      'taskmanager': { 'polldelay': 10 },
+                                     } )
+
+        c = Configuration()
+        c.read_from_data(test_conf)
+        self.assertEquals(c.get_section_conf('backend')['path'], 'test_path')
+
+    def test_sanitise(self):
+        # make some config files that exist
+        test_conf = make_conf( {'backend': { 'path':__file__}} )
+        
+        c = Configuration()
+        c.read_from_data(test_conf)
+
+        # this shouldn't raise exception because path exists
+        c.sanitise()
+
+        # make a config where path is not found
+        test_conf_broken = make_conf( {'backend': {'path':'/path/to/non/file'}} )
+        c = Configuration()
+        c.read_from_data(test_conf_broken)
+
+        self.assertRaises(
+            ConfigError,
+            c.sanitise
+        )
+
+    def test_yabiadmin_property(self):
+        for admin_url in ('http://test:1000/path/sub', 'https://127.0.0.1/'):
+            c = Configuration()
+            c.read_from_data( make_conf( {'backend':{'admin':admin_url}} ))
+            self.assertEquals( c.yabiadmin, admin_url )
+
+    def test_yabiadminscheme_property(self):
+        for admin_url in ('http://test:1000/path/sub', 'https://127.0.0.1/'):
+            c = Configuration()
+            c.read_from_data( make_conf( {'backend':{'admin':admin_url}} ))
+            self.assertEquals( c.yabiadminscheme, admin_url.split(':')[0] )
+
+    def test_yabiadminserver_property(self):
+        for admin_url in ('http://test:1000/path/sub', 'https://127.0.0.1/'):
+            c = Configuration()
+            c.read_from_data( make_conf( {'backend':{'admin':admin_url}} ))
+            self.assertEquals( c.yabiadminserver, admin_url.split('://')[1].split('/')[0].split(':')[0] )
+
+    def test_yabiadminport_property(self):
+        for (admin_url, port) in ( ('http://test:1000/path/sub',1000), ('https://127.0.0.1/',None)):
+            c = Configuration()
+            c.read_from_data( make_conf( {'backend':{'admin':admin_url}} ))
+            self.assertEquals( c.yabiadminport, port )
+
+    def test_yabiadminpath_property(self):
+        for (admin_url, path) in ( ('http://test:1000/path/sub','/path/sub'), ('https://127.0.0.1/','/')):
+            c = Configuration()
+            c.read_from_data( make_conf( {'backend':{'admin':admin_url}} ))
+            self.assertEquals( c.yabiadminpath, path )
+
+    def test_mktemp(self):
+        c = Configuration()
+        c.read_from_data( make_conf( {'backend':{'temp':'/unavailable'}} ))
+        self.assertRaises(
+            OSError,
+            c.mktemp,
+            ".dat"
+        )
+
+        c.read_from_data( make_conf( {'backend':{'temp':'/tmp'}} ))
+        fd, filename = c.mktemp('.dat')
+        self.assertTrue(filename.startswith('/tmp/tmp'))
+        self.assertTrue(filename.endswith('.dat'))
+        self.assertTrue(os.path.exists(filename))
+        os.unlink(filename)
+        
+        
+                        
+    
+    
+    

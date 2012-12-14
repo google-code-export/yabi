@@ -4,6 +4,8 @@ init:
 
 tests: test
 
+vtests: vtest
+
 test:
 	nosetests ./tests/*.py
 

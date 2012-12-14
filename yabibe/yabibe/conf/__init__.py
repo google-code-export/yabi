@@ -117,99 +117,64 @@ def time_parser(t):
 ##
 class Configuration(object):
     """Holds the running configuration for the full yabi stack that is running under this twistd"""
-    # how to handle the values in the config file.
-    converters = {
-        'backend': {
-            'port': port_setting_parser,
-            'start_http' : boolean_parser,
-            
-            'start_https' : boolean_parser,
-            'sslport' : port_setting_parser,
+    def __init__(self):
+        self.reset()
 
-            'path': path_parser,
+    def reset(self):
+        """reset the config to be completely empty. We need this to run test suites over the singleton instance"""
+        # how to handle the values in the config file.
+        self.converters = {
+            'backend': {
+                'port': port_setting_parser,
+                'start_http' : boolean_parser,
 
-            'fifos': path_parser,
-            'tasklets': path_parser,
-            'certificates': path_parser,
-            'temp': path_parser,
+                'start_https' : boolean_parser,
+                'sslport' : port_setting_parser,
 
-            'certfile': path_parser,
-            'keyfile': path_parser,
+                'path': path_parser,
 
-            'hmackey': string_parser,
+                'fifos': path_parser,
+                'tasklets': path_parser,
+                'certificates': path_parser,
+                'temp': path_parser,
 
-            'admin': url_parser,
-            'admin_cert_check': boolean_parser,
+                'certfile': path_parser,
+                'keyfile': path_parser,
 
-            'source': string_parser,
-            'runningdir': string_parser,
-            'pidfile': string_parser,
-            'logfile': string_parser,
+                'hmackey': string_parser,
 
-            'syslog_facility': syslog_facility_parser,
-            'syslog_prefix': string_parser,
-            
-            'debug': boolean_parser,
-        },
-        'taskmanager': {
-            'polldelay': time_parser,
-            'startup': boolean_parser,
-            'tasktag': string_parser,
-            'retrywindow': time_parser
-        },
-        'execution': {
-            'logcommand': boolean_parser,
-            'logscripts': boolean_parser,
-        },
-        'ssh+sge': {
-            'qstat': path_parser,
-            'qsub': path_parser,
-            'qacct': path_parser
+                'admin': url_parser,
+                'admin_cert_check': boolean_parser,
+
+                'source': string_parser,
+                'runningdir': string_parser,
+                'pidfile': string_parser,
+                'logfile': string_parser,
+
+                'syslog_facility': syslog_facility_parser,
+                'syslog_prefix': string_parser,
+
+                'debug': boolean_parser,
+            },
+            'taskmanager': {
+                'polldelay': time_parser,
+                'startup': boolean_parser,
+                'tasktag': string_parser,
+                'retrywindow': time_parser
+            },
+            'execution': {
+                'logcommand': boolean_parser,
+                'logscripts': boolean_parser,
+            },
+            'ssh+sge': {
+                'qstat': string_parser,
+                'qsub': string_parser,
+                'qacct': string_parser
+            }
         }
-    }
-     
-    # defaults
-    config = {
-        'backend':  {
-            "port":"0.0.0.0:8000",
-            "start_http":"true",
-            
-            "sslport":"0.0.0.0:8443",
-            "start_https":"false",
-            
-            "path":"/",
-            
-            "fifos":None,
-            "tasklets":None,
-            "certificates":None,
-            
-            "certfile":"~/.yabi/servercert.pem",
-            "keyfile":"~/.yabi/servercert.pem",
-            
-            "hmackey":None,
-            
-            "admin":None,
-            "admin_cert_check":True,
-            
-            "syslog_facility":syslog.LOG_DAEMON,
-            "syslog_prefix":r"YABI [yabibe:%(username)s]",
-        },
-        'taskmanager':{
-            'polldelay':'5',
-            'startup':'true',
-            "tasktag":None,
-            "retrywindow":60,           # default is to retry for 1 minute. This is for dev and testing. production should up this value.
-        },
-        'ssh+sge':{
-            'qstat':'qstat',
-            'qsub':'qsub',
-            'qacct':'qacct',
-        },
-        'execution':{
-            'logcommand':'true',
-            'logscripts':'true'
-        },
-    }
+
+        # defaults
+        self.config = {}
 
     def read_defaults(self):
         """read the underlying defaults into the configuration object"""
@@ -226,6 +191,8 @@ class Configuration(object):
         after processing it through proc func if that is set"""
         if parser.has_section(name):
             if parser.has_option(name, key):
+                if name not in self.config:
+                    self.config[name] = {}                
                 if proc is not None:
                     self.config[name][key] = proc(parser.get(name,key))
                 else:
@@ -254,80 +221,43 @@ class Configuration(object):
     
     def sanitise(self):
         """Check the settings for sanity"""
-        for section in self.SECTIONS:
-            self.config[section]['start_http'] = boolean_proc(self.config[section]['start_http'])
-            self.config[section]['start_https'] = boolean_proc(self.config[section]['start_https'])
-            self.config[section]['port'] = port_setting(self.config[section]['port'])
-            self.config[section]['sslport'] = port_setting(self.config[section]['sslport'])
-            
-            conversions = dict( 
-                telnet=boolean_proc,
-                telnetport=port_setting,
-                debug=boolean_proc
-            )
-            
-            for key, value in conversions.iteritems():
-                if key in self.config[section]:
-                    self.config[section][key] = value(self.config[section][key])
+        # check all the mentioned file paths exists
+        for section in self.converters:
+            control = self.converters[section]
+            for k,v in control.iteritems():
+                if v==path_parser:
+                    # this config setting is a file path.
+                    # if we have it in the config...
+                    if section in self.config and k in self.config[section]:
+                        path = self.config[section][k]
+                        if not os.path.exists(path):
+                            raise ConfigError("Setting [%s] %s:%s : Path not found"%(section,k,path))
+                        
          
     ##
     ## Methods to gather settings
     ##
     @property
     def yabiadmin(self):
-        scheme,rest = parse_url(self.config['backend']['admin'])
-        return "%s://%s:%d%s"%(scheme,rest.hostname,rest.port,rest.path)
+        parse = urlparse.urlparse(self.config['backend']['admin'])
+        return urlparse.urlunparse(parse)
         
     @property
     def yabiadminscheme(self):
-        return parse_url(self.config['backend']['admin'])[0]
+        return urlparse.urlparse(self.config['backend']['admin']).scheme
 
     @property
     def yabiadminserver(self):
-        return parse_url(self.config['backend']['admin'])[1].hostname
+        return urlparse.urlparse(self.config['backend']['admin']).hostname
         
     @property
     def yabiadminport(self):
-        return parse_url(self.config['backend']['admin'])[1].port
+        return urlparse.urlparse(self.config['backend']['admin']).port
     
     @property
     def yabiadminpath(self):
-        return parse_url(self.config['backend']['admin'])[1].path
+        return urlparse.urlparse(self.config['backend']['admin']).path
     
-    
-    @property
-    def yabistore(self):
-        return "%s:%d%s"%tuple(self.config['store']['port']+(self.config['store']['path'],))
-    
-    
-    
-    ##
-    ## classify the settings into a ip/port based classification
-    ##
-    def classify_ports(self):
-        ips = {}
-        for section in self.SECTIONS:
-            ip, port = self.config[section]['port']
-            
-            # ip number
-            ipstore = ips[ip] if ip in ips else {}
-            
-            # then port
-            portstore = ipstore[port] if port in ipstore else {}
-            
-            # then path
-            path = self.config[section]['path']
-            if path in portstore:
-                # error. duplicate path
-                raise ConfigError, "overlapping application paths"
-            
-            portstore[path] = section
-            
-            ipstore[port] = portstore
-            ips[ip] = ipstore
-            
-        return ips
-        
     def mktemp(self,suffix,prefix='tmp'):
         """Make a unique filename in the tempfile area and return its filename"""
         tempdir = self.config['backend']['temp']
