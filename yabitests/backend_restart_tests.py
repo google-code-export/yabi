@@ -70,17 +70,18 @@ class BackendRestartTest(RequestTestWithAdmin):
     def get_backend_task_debug(self):
         import requests
         
-        r = requests.get( conf.yabibeurl+"/debug" )
+        r = requests.get( conf.yabibeurl + "debug" )
         self.assertTrue(r.status_code==200, "tried to access backend debug and got remote error: %d"%r.status_code)
         
         dat = json.loads(r.text)
         return dat
 
     def stop_backend(self):
-        os.system("cd .. && pwd && ./yabictl.sh stopyabibe")
+        os.system(conf.stopyabibe)
+        os.system(conf.yabistatus)
     
     def start_backend(self):
-        os.system("cd .. && pwd && ./yabictl.sh startyabibe")
+        os.system(conf.startyabibe)
 
     def test_single_task_restart(self):
         # run backend tasks one at a time so we can restart the backend during execution
