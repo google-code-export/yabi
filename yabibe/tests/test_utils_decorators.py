@@ -4,6 +4,8 @@ import gevent
 import unittest2 as unittest
 from mock import MagicMock, patch
 from twisted.web.http_headers import Headers
+
+from yabibe.conf import config
 from yabibe.utils import decorators
 
 
@@ -21,9 +23,9 @@ class DecoratorsTestSuite(unittest.TestCase):
     """Test yabibe.utils.decorators"""
     def setUp(self):
         pass
-
+    
     def tearDown(self):
-        pass
+        config.reset()
         #mock_gevent_sleep.reset_mock()
 
     def test_delay_generator(self):
@@ -223,6 +225,9 @@ class DecoratorsTestSuite(unittest.TestCase):
         self.assertEquals( count[0], 2 )
 
     def test_conf_retry(self):
+        # conf_retry requires retrywindow
+        config.config['taskmanager'] = {'retrywindow':60}
+        
         def inner():
             pass
 
@@ -339,8 +344,10 @@ class SleepyDecoratorsTestSuite(unittest.TestCase):
         self.assertTrue('No hmac-digest header present' in text)            
 
     def test_hmac_correct_headers(self):
+        # setup a hmac key for us
+        config.config['backend'] = {'hmackey':'8c618fdf52ac6eded9311f95507ba436'}
+        
         for uri in ('http://www.google.com/', 'https://localhost:8312/path/to/resource?get=var+extra&another=1','safswert?#$!&%*^&*' ):
-            from yabibe.conf import config
             hmac_digest = hmac.new(config.config['backend']['hmackey']) 
             hmac_digest.update(uri)
             hmac_hex = hmac_digest.hexdigest()

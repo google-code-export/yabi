@@ -2,12 +2,8 @@
 from yabibe.conf import config
 import os
 
-config.read_defaults()
-
 # for SSL context
 from OpenSSL import SSL
-
-import os
 
 # for HTTPS, we need a server context factory to build the context for each ssl connection
 class ServerContextFactory:

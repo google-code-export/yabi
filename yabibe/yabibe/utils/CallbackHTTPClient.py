@@ -14,10 +14,9 @@ DEBUG = False
 
 import hmac
 
-HMAC_SECRET = config.config['backend']['hmackey']
 
 def sign_uri(uri):
-    hmac_digest = hmac.new(HMAC_SECRET)
+    hmac_digest = hmac.new(config.config['backend']['hmackey'])
     hmac_digest.update(uri)
     return hmac_digest.hexdigest()
 
