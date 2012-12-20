@@ -2,6 +2,7 @@ import unittest2 as unittest
 import os
 
 from yabibe.connectors.ex.ExecConnector import ExecConnector
+from yabibe.exceptions import NotImplemented
 
 class ExecConnectorTestSuite(unittest.TestCase):
     """Test yabibe.connectors.ex.ExecConnector"""
@@ -101,5 +102,36 @@ class ExecConnectorTestSuite(unittest.TestCase):
         # delete the file
         os.unlink(save_file)
         
-        
+    def test_shutdown_startup(self):
+        e = self.ec()
+        e.shutdown('/tmp')
+
+        # make a new ec and load this into it
+        e2 = ExecConnector()
+        e2.startup('/tmp')
+        for key in self.sets:
+            self.assertEquals( e2.get_running(key), self.sets[key] )
+
+        # delete the file
+        os.unlink("/tmp/exec-ExecConnector")
+
+    def test_startup_non_existance(self):
+        e2 = ExecConnector()
+        e2.startup('/non-existant')
+
+    def test_unimplemented_tun(self):
+        e = self.ec()
+        self.assertRaises(
+            NotImplemented,
+            e.run
+        )
+
+    def test_set_environ(self):
+        ourenv = { 'testvar':'testval' }
+        e = self.ec()
+        e.SetEnvironment( ourenv )
+        self.assertEquals(e.childenv, ourenv)
+
+        e.SetEnvironment( os.environ )
+        self.assertEquals(e.childenv, os.environ)
         

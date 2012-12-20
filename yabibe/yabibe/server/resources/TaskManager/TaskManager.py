@@ -8,7 +8,7 @@ from twisted.web import client
 
 from Task import NullBackendTask, MainTask
 from Tasklets import tasklets
-from yabibe.ServerContextFactory import ServerContextFactory
+from yabibe.server.ServerContextFactory import ServerContextFactory
 from yabibe.conf import config
 from yabibe.reactor.GeventReactor import waitForDeferred
 from yabibe.utils.geventtools import sleep

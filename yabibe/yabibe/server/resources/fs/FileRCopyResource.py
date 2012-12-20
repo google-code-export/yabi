@@ -6,9 +6,8 @@ import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
-from .connector.FSConnector import NotImplemented
-from yabibe.exceptions import BlockingException
-from yabibe.resources.TaskManager.TaskTools import Sleep, Copy, List, Mkdir, GETFailure, CopyError
+from yabibe.exceptions import BlockingException, NotImplemented
+from yabibe.server.resources.TaskManager.TaskTools import Sleep, Copy, List, Mkdir, GETFailure, CopyError
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTDataRemoteWriter
 

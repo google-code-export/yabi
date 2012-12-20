@@ -7,7 +7,7 @@ from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
 from MimeStreamDecoder import MimeStreamDecoder
-from connector.FSConnector import NotImplemented
+from yabibe.exceptions import NotImplemented
 from yabibe.utils.decorators import hmac_authenticated
 from yabibe.utils.geventtools import WaitForDeferredData
 from yabibe.utils.parsers import parse_url

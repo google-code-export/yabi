@@ -7,7 +7,7 @@ from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
 from MimeStreamDecoder import no_intr
-from connector.FSConnector import NotImplemented
+from yabibe.exceptions import NotImplemented
 from yabibe.exceptions import NoCredentials
 from yabibe.utils.FifoStream import FifoStream
 from yabibe.utils.decorators import hmac_authenticated

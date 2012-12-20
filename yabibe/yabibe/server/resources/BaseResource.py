@@ -9,9 +9,9 @@ from fs.resource import FSResource
 
 # backends
 
-from fs.connector.SSHFilesystem import SSHFilesystem
-from fs.connector.S3Filesystem import S3Filesystem
-from fs.connector.LocalFilesystem import LocalFilesystem
+from yabibe.connectors.fs.SSHFilesystem import SSHFilesystem
+from yabibe.connectors.fs.S3Filesystem import S3Filesystem
+from yabibe.connectors.fs.LocalFilesystem import LocalFilesystem
 
 ##
 ## Execution resources
@@ -19,14 +19,14 @@ from fs.connector.LocalFilesystem import LocalFilesystem
 from ex.resource import ExecResource
 
 # backends
-from ex.connector.SGEConnector import SGEConnector
-from ex.connector.TorqueConnector import TorqueConnector
-from ex.connector.SSHConnector import SSHConnector
-from ex.connector.SSHTorqueConnector import SSHTorqueConnector
-from ex.connector.SSHPbsproConnector import SSHPbsproConnector
-from ex.connector.SSHSGEConnector import SSHSGEConnector
-from ex.connector.LocalConnector import LocalConnector
-from ex.connector.ExplodingConnector import ExplodingConnector
+from yabibe.connectors.ex.SGEConnector import SGEConnector
+from yabibe.connectors.ex.TorqueConnector import TorqueConnector
+from yabibe.connectors.ex.SSHConnector import SSHConnector
+from yabibe.connectors.ex.SSHTorqueConnector import SSHTorqueConnector
+from yabibe.connectors.ex.SSHPbsproConnector import SSHPbsproConnector
+from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
+from yabibe.connectors.ex.LocalConnector import LocalConnector
+from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
 
 # taskmanager debug
 from TaskManager import TaskManagerResource, TaskManagerPickleResource
