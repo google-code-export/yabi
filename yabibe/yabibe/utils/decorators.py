@@ -69,7 +69,10 @@ def timed_retry(total_time=DEFAULT_FUNCTION_RETRY_TIME,redress=[]):
     return timed_retry_decorator    
 
 def conf_retry(redress=[]):
-    return timed_retry(config.config["taskmanager"]["retrywindow"], redress)
+    if 'taskmanager' in config.config:
+        return timed_retry(config.config["taskmanager"]["retrywindow"], redress)
+    else:
+        return timed_retry(60.0, redress)
 
 def lock(maximum):
     def lock_decorator(f):

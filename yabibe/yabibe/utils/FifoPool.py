@@ -16,11 +16,11 @@ class FifoPool(object):
             assert os.path.exists(storage) and os.path.isdir(storage), "Storage directory %s does not exist"%storage
             self.storage = storage
         else:
-            self._make_fifo_storage()
-        
+            self.storage = None
+            
         self._fifos={}
         
-    def _make_fifo_storage(self):
+    def make_fifo_storage(self):
         """makes a directory for storing the fifos in"""
         directory = config.config['backend']['fifos']
         if not directory:
@@ -29,20 +29,20 @@ class FifoPool(object):
             self.storage = directory
         #print "=================> FifoPool created in",self.storage
     
-    def _make_fifo(self, prefix="fifo_",suffix=""):
+    def make_fifo(self, prefix="fifo_",suffix=""):
         """make a fifo on the filesystem and return its path"""
         filename = tempfile.mktemp(suffix=suffix, prefix=prefix, dir=self.storage)                # insecure, but we dont care
         os.umask(0)
         os.mkfifo(filename, FIFO_MOD)
         return filename
     
-    def Get(self):
+    def get(self):
         """return a new fifo path"""
         fifo = self._make_fifo()
         self._fifos[fifo]=[]
         return fifo
         
-    def WeakLink(self, fifo, *procs):
+    def weak_link(self, fifo, *procs):
         """Link the running proccesses to our fifo. Weak refs are used. When all the weakrefs for a fifo expire, the fifo is deleted. AUTOMAGICAL power of weakrefs"""
         
         # a closure to remove the fifo if the list is empty
@@ -57,5 +57,7 @@ class FifoPool(object):
             ref = weakref.ref( proc, remove_ref )
             self._fifos[fifo].append(ref)
             
-    def MakeURLForFifo(self,filename):
+    def make_url_for_fifo(self,filename):
         return "file://"+os.path.normpath(filename)
+
+Fifos = FifoPool()
