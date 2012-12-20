@@ -7,10 +7,10 @@ from twisted.python import log
 from twistedweb2 import http, responsecode, http_headers, stream
 
 from yabibe.exceptions import ExecutionError
-from ExecConnector import ExecConnactor
+from ExecConnector import ExecConnector
 from SubmissionTemplate import make_script
 from yabibe.conf import config
-from yabibe.resources.TaskManager.TaskTools import RemoteInfo
+from yabibe.server.resources.TaskManager.TaskTools import RemoteInfo
 from yabibe.utils.RetryController import SSHSGEQsubRetryController, SSHSGEQstatRetryController, SSHSGEQacctRetryController, HARD
 from yabibe.utils.geventtools import sleep
 from yabibe.utils.protocol import ssh
