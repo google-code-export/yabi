@@ -2,31 +2,8 @@
 from twistedweb2 import resource, http_headers, responsecode, http
 import os, sys
 
-##
-## Filesystem resources
-##
 from fs.resource import FSResource
-
-# backends
-
-from yabibe.connectors.fs.SSHFilesystem import SSHFilesystem
-from yabibe.connectors.fs.S3Filesystem import S3Filesystem
-from yabibe.connectors.fs.LocalFilesystem import LocalFilesystem
-
-##
-## Execution resources
-##
 from ex.resource import ExecResource
-
-# backends
-from yabibe.connectors.ex.SGEConnector import SGEConnector
-from yabibe.connectors.ex.TorqueConnector import TorqueConnector
-from yabibe.connectors.ex.SSHConnector import SSHConnector
-from yabibe.connectors.ex.SSHTorqueConnector import SSHTorqueConnector
-from yabibe.connectors.ex.SSHPbsproConnector import SSHPbsproConnector
-from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
-from yabibe.connectors.ex.LocalConnector import LocalConnector
-from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
 
 # taskmanager debug
 from TaskManager import TaskManagerResource, TaskManagerPickleResource
@@ -51,9 +28,22 @@ class BaseResource(resource.PostableResource):
         self.child_pickle = TaskManagerPickleResource()
         
     def LoadExecConnectors(self, quiet=False):
+        from yabibe.connectors.ex.SGEConnector import SGEConnector
+        from yabibe.connectors.ex.TorqueConnector import TorqueConnector
+        from yabibe.connectors.ex.SSHConnector import SSHConnector
+        from yabibe.connectors.ex.SSHTorqueConnector import SSHTorqueConnector
+        from yabibe.connectors.ex.SSHPbsproConnector import SSHPbsproConnector
+        from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
+        from yabibe.connectors.ex.LocalConnector import LocalConnector
+        from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
+        
         self.child_exec.LoadConnectors(quiet)
         
     def LoadFSConnectors(self, quiet=False):
+        from yabibe.connectors.fs.SSHFilesystem import SSHFilesystem
+        from yabibe.connectors.fs.S3Filesystem import S3Filesystem
+        from yabibe.connectors.fs.LocalFilesystem import LocalFilesystem
+
         self.child_fs.LoadConnectors(quiet)
         
     def LoadConnectors(self, quiet=False):

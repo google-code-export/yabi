@@ -19,7 +19,7 @@ from yabibe.utils.sgetools import qsub, qstat, qacct
 
 import json
 
-from yabibe.resources.TaskManager.TaskTools import RemoteInfo
+from yabibe.server.resources.TaskManager.TaskTools import RemoteInfo
 
 # for Job status updates, poll this often
 def JobPollGeneratorDefault():

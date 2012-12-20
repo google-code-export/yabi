@@ -4,7 +4,7 @@ import weakref
 import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http, stream
-from yabibe.resources.TaskManager.Tasklets import tasklets
+from yabibe.server.resources.TaskManager.Tasklets import tasklets
 
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTDataRemoteWriter

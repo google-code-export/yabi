@@ -6,9 +6,9 @@ import gevent
 from twistedweb2 import http, responsecode, http_headers, stream
 
 from yabibe.exceptions import ExecutionError
-from ExecConnector import ExecConnactor
+from ExecConnector import ExecConnector
 from yabibe.conf import config
-from yabibe.resources.TaskManager.TaskTools import RemoteInfo
+from yabibe.server.resources.TaskManager.TaskTools import RemoteInfo
 from yabibe.utils.decorators import conf_retry
 from yabibe.utils.geventtools import sleep
 from yabibe.utils.protocol import ssh
