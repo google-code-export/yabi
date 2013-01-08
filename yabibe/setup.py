@@ -8,12 +8,13 @@ setup(name='yabibe',
     long_description='Yabi back end service',
     author='Centre for Comparative Genomics',
     author_email='web@ccg.murdoch.edu.au',
-    packages=['yabibe']+[
-        'yabibe.%s'%x for x in "conf ex FifoPool fs TaskManager utils log".split()
-    ]+'yabibe.ex.connector yabibe.fs.connector yabibe.utils.protocol yabibe.utils.protocol.globus yabibe.utils.protocol.s3 yabibe.utils.protocol.ssh'.split(),
+    packages=['yabibe',
+              'yabibe.conf',
+
+              ],
     package_data={'yabibe': ['conf/*.conf']},
     zip_safe=False,
-    scripts=['yabibe/scripts/yabibe'],
+    scripts=['scripts/yabibe'],
     install_requires=[
         'pyOpenSSL==0.12',
         'pycrypto==2.3',

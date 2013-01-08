@@ -10,13 +10,15 @@
 import sys, os, string
 if string.find(os.path.abspath(sys.argv[0]), os.sep+'Twisted') != -1:
     sys.path.insert(0, os.path.normpath(os.path.join(os.path.abspath(sys.argv[0]), os.pardir, os.pardir)))
+#sys.path.insert(0,'')
+print "PATH",sys.path
 if hasattr(os, "getuid") and os.getuid() != 0:
     sys.path.insert(0, os.path.abspath(os.getcwd()))
 ### end of preamble
 
 # before we run the server, we want to find the python server.py
-import yabibe.server
-serverfile = yabibe.server.__file__
+import yabibe.server.server
+serverfile = yabibe.server.server.__file__
 
 if serverfile.endswith(".pyc"):
     serverfile = serverfile[:-4]+".py"
@@ -29,4 +31,5 @@ pythonbase = os.path.dirname(python)
 twistd = "%s/twistd"%(pythonbase)
 
 # now lets run our server
-os.execv(python,[python,twistd,"-y",serverfile]+sys.argv[1:])
+command = [python,twistd,"-y",serverfile]+sys.argv[1:]
+os.execv(command[0], command)
