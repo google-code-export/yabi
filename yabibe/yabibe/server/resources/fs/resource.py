@@ -28,8 +28,8 @@ class FSResource(resource.Resource, BackendResource):
     
     def LoadConnectors(self, quiet=False):
         """Load all the backend connectors into our backends"""
-        import connector
-        return BackendResource.LoadConnectors(self,connector,'FSConnector','fs', quiet=quiet)
+        from yabibe import connectors
+        return BackendResource.LoadConnectors(self,connectors,'FSConnector','fs', quiet=quiet)
     
     def render(self, request):
         # break our request path into parts

@@ -5,10 +5,10 @@ from twisted.internet import reactor
 from twisted.python import syslog
 from twistedweb2 import log, channel, server
 
-from ServerContextFactory import ServerContextFactory
-from conf import config
-from resources.BaseResource import base
-from utils import rm_rf
+from yabibe.server.ServerContextFactory import ServerContextFactory
+from yabibe.conf import config
+from yabibe.server.resources.BaseResource import base
+from yabibe.utils import rm_rf
 
 def app():
     #sys.path.append(os.path.dirname(__file__))                  # add our base directory to the pythonpath
@@ -96,10 +96,12 @@ def startup():
     # setup the TaskManager if we are needed
     if config.config["taskmanager"]["startup"]:
         print "Starting task manager"
-        from resources import TaskManager
+        from yabibe.server.resources import TaskManager
         reactor.callLater(0.1,TaskManager.startup) 
     else:
         print "NOT starting task manager"
 
     print "Initialising connectors..."
     base.startup()
+
+application = app()

@@ -1,6 +1,6 @@
 
 from yabibe.exceptions import ExecutionError
-from ExecConnector import ExecConnactor
+from ExecConnector import ExecConnector
 
 # a list of system environment variables we want to "steal" from the launching environment to pass into our execution environments.
 ENV_CHILD_INHERIT = ['PATH']
