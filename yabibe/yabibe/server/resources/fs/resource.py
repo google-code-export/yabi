@@ -28,8 +28,8 @@ class FSResource(resource.Resource, BackendResource):
     
     def LoadConnectors(self, quiet=False):
         """Load all the backend connectors into our backends"""
-        from yabibe import connectors
-        return BackendResource.LoadConnectors(self,connectors,'FSConnector','fs', quiet=quiet)
+        from yabibe.connectors import fs
+        return BackendResource.LoadConnectors(self,fs,'FSConnector','fs', quiet=quiet)
     
     def render(self, request):
         # break our request path into parts
@@ -169,3 +169,4 @@ class FSResource(resource.Resource, BackendResource):
             raise Exception, "Backend '%s' not found\n"%srcscheme
         
         return self.GetBackend(srcscheme).cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+

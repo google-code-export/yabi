@@ -287,6 +287,11 @@ def UserCreds(yabiusername, uri, credtype="fs"):
     if DEBUG:
         print "JSON DATA:",data
     return json.loads(data)
-    
 
-            
+def uriify(scheme,username,hostname,port=None,path=None):
+    uri = "%s://%s@%s"%(scheme,username,hostname)
+    if port:
+        uri = "%s:%d"%(uri,port)
+    if path:
+        uri = "%s%s"%(uri,path)
+    return uri
