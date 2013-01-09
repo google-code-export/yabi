@@ -10,7 +10,7 @@ from yabibe.exceptions import PermissionDenied, InvalidPath
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh
-
+from yabibe.server.resources.TaskManager.TaskTools import UserCreds, uriify
 
 sshauth = ssh.SSHAuth.SSHAuth()
 
@@ -58,16 +58,11 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def mkdir(self, host, username, path, port=22, yabiusername=None, creds={},priority=0):
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         # acquire our queue lock
         if priority:
             lock = self.lockqueue.lock()
         
-        # If we don't have creds, get them
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-        
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -110,16 +105,11 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def rm(self, host, username, path, port=22, yabiusername=None, recurse=False, creds={}, priority=0):
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         # acquire our queue lock
         if priority:
             lock = self.lockqueue.lock()
         
-        # If we don't have creds, get them
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-        
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
         
         # we need to munge the path for transport over gsissh (cause it sucks)
@@ -162,21 +152,14 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))                            
     #@call_count
     def ls(self, host, username, path, port=22, yabiusername=None, recurse=False, culldots=True, creds={}, priority=0):
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         if DEBUG:
             print "SSHFilesystem::ls(",host,username,path,port,yabiusername,recurse,culldots,creds,priority,")"
         
         # acquire our queue lock
         if priority:
-            #print "aquiring lock"
             lock = self.lockqueue.lock()
-            #print "lock acquired",lock
                 
-        # If we don't have creds, get them
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-        
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
         
         # we need to munge the path for transport over gsissh (cause it sucks)
@@ -221,16 +204,11 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def ln(self, host, username, target, link, port=22, yabiusername=None, creds={},priority=0):
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         # acquire our queue lock
         if priority:
             lock = self.lockqueue.lock()
         
-        # If we don't have creds, get them
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, target)
-        
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -272,16 +250,11 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def cp(self, host, username, src, dst, port=22, yabiusername=None, recurse=False, creds={},priority=0):
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         # acquire our queue lock
         if priority:
             lock = self.lockqueue.lock()
         
-        # If we don't have creds, get them
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, dst)
-        
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -336,20 +309,11 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         """
         if DEBUG:
             print "SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        
-        # make sure we are authed
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-            
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
+        return ssh.Copy.WriteToRemote(usercert,dst,port=port,password=str(creds['password']),fifo=fifo)
         
-        pp, fifo = ssh.Copy.WriteToRemote(usercert,dst,port=port,password=str(creds['password']),fifo=fifo)
-        
-        return pp, fifo
-    
     #@lock
     def GetReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user.
@@ -363,54 +327,29 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         """
         if DEBUG:
             print "SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        
-        # make sure we are authed
-        if not creds:
-            #print "get creds"
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-            
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
+        return ssh.Copy.ReadFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
-        #print "read from remote"
-        pp, fifo = ssh.Copy.ReadFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
-        #print "read from remote returned"
-        
-        return pp, fifo
-
     def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
         if DEBUG:
             print "SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        
-        # make sure we are authed
-        if not creds:
-            #print "get creds"
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-            
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
+        return ssh.Copy.ReadCompressedFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
-        pp, fifo = ssh.Copy.ReadCompressedFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
-        
-        return pp, fifo
-
     def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
         if DEBUG:
             print "SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
-        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        
-        # make sure we are authed
-        if not creds:
-            #print "get creds"
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, path)
-            
+        creds = self.Creds(yabiusername, creds)
         usercert = self.save_identity(creds['key'])
+        return ssh.Copy.WriteCompressedToRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
-        pp, fifo = ssh.Copy.WriteCompressedToRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
-        
-        return pp, fifo
+    def Creds(self, yabiusername, creds):
+        assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
+        return creds or UserCreds( yabiusername, uriify( SCHEMA, username, host, path=path), credtype="fs")

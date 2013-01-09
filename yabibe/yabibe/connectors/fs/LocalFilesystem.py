@@ -429,13 +429,8 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         """
         if DEBUG:
             print "LocalFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
+        return LocalShell().WriteToRemote(os.path.join(path,filename),fifo=fifo)
         
-        dst = os.path.join(path,filename)
-        
-        pp, fifo = LocalShell().WriteToRemote(dst,fifo=fifo)
-        
-        return pp, fifo
-    
     #@lock
     def GetReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user.
@@ -449,31 +444,17 @@ class LocalFilesystem(FSConnector.FSConnector, object):
         """
         if DEBUG:
             print "LocalFilesystem::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
-        dst = os.path.join(path,filename)
+        return LocalShell().ReadFromRemote(os.path.join(path,filename),fifo=fifo)
         
-        pp, fifo = LocalShell().ReadFromRemote(dst,fifo=fifo)
-        #print "read from remote returned"
-        
-        return pp, fifo
-
     #@lock
     def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         if DEBUG:
             print "LocalFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
+        return LocalShell().WriteCompressedToRemote(os.path.join(path,filename),fifo=fifo)
         
-        dst = os.path.join(path,filename)
-        
-        pp, fifo = LocalShell().WriteCompressedToRemote(dst,fifo=fifo)
-        
-        return pp, fifo
-    
     #@lock
     def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         if DEBUG:
             print "LocalFilesystem::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
-        dst = os.path.join(path,filename)
+        return LocalShell().ReadCompressedFromRemote(os.path.join(path,filename),fifo=fifo)
         
-        pp, fifo = LocalShell().ReadCompressedFromRemote(dst,fifo=fifo)
-        
-        return pp, fifo
-

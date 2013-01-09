@@ -21,8 +21,8 @@ class ExecResource(resource.Resource, BackendResource):
         
     def LoadConnectors(self, quiet=False):
         """Load all the backend connectors into our backends"""
-        from yabibe import connectors
-        return BackendResource.LoadConnectors(self,connectors,'ExecConnector','exec', quiet=quiet)
+        from yabibe.connectors import ex
+        return BackendResource.LoadConnectors(self,ex,'ExecConnector','exec', quiet=quiet)
   
     def render(self, request):
         # break our request path into parts
