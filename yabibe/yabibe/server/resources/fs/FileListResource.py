@@ -6,7 +6,7 @@ import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
-from yabibe.exceptions import PermissionDenied, InvalidPath, BlockingException, NoCredentials, ProxyInitError
+from yabibe.exceptions import PermissionDenied, InvalidPath, BlockingException, CredentialNotFound, ProxyInitError
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTData
 
@@ -92,7 +92,7 @@ class FileListResource(resource.PostableResource):
                 if DEBUG:
                     print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.NOT_FOUND, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
-            except (PermissionDenied,NoCredentials,ProxyInitError), exception:
+            except (PermissionDenied,CredentialNotFound,ProxyInitError), exception:
                 print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.FORBIDDEN, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
             except Exception, e:

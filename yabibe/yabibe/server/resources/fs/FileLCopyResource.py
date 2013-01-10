@@ -5,7 +5,7 @@ import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
-from yabibe.exceptions import PermissionDenied, InvalidPath, BlockingException, NoCredentials, ProxyInitError
+from yabibe.exceptions import PermissionDenied, InvalidPath, BlockingException, CredentialNotFound, ProxyInitError
 from yabibe.utils.decorators import hmac_authenticated
 from yabibe.utils.submit_helpers import parsePOSTData
 
@@ -67,7 +67,7 @@ class FileLCopyResource(resource.PostableResource):
             except BlockingException, be:
                 print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(be)))
-            except (PermissionDenied,NoCredentials,InvalidPath,ProxyInitError), exception:
+            except (PermissionDenied,CredentialNotFound,InvalidPath,ProxyInitError), exception:
                 print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.FORBIDDEN, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(exception)))
             except Exception, e:

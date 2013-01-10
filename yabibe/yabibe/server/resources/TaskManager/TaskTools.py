@@ -7,7 +7,7 @@ import gevent
 from yabibe.conf import config
 from yabibe.utils.geventtools import GET, POST, GETFailure, RetryGET, RetryPOST
 from yabibe.utils.parsers import parse_url
-from yabibe.exceptions import NoSuchCredential
+from yabibe.exceptions import CredentialNotFound
 
 COPY_RETRY = LINK_RETRY = LCOPY_RETRY = 5
 
@@ -281,7 +281,7 @@ def UserCreds(yabiusername, uri, credtype="fs"):
     url = os.path.join(config.yabiadminpath,'ws/credential/%s/%s/?uri=%s'%(credtype,yabiusername,urllib.quote(uri)))
     code, message, data = RetryGET(url, scheme=config.yabiadminscheme, host=config.yabiadminserver, port=config.yabiadminport)
     if code!=200:
-        raise NoSuchCredential("GET request for %s returned %d => %s"%(url,code,message))
+        raise CredentialNotFound("GET request for %s returned %d => %s"%(url,code,message))
     if DEBUG:
         print "JSON DATA:",data
     return json.loads(data)
