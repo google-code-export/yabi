@@ -282,8 +282,6 @@ def UserCreds(yabiusername, uri, credtype="fs"):
     code, message, data = RetryGET(url, scheme=config.yabiadminscheme, host=config.yabiadminserver, port=config.yabiadminport)
     if code!=200:
         raise CredentialNotFound("GET request for %s returned %d => %s"%(url,code,message))
-    if DEBUG:
-        print "JSON DATA:",data
     return json.loads(data)
 
 def uriify(scheme,username,hostname,port=None,path=None):
