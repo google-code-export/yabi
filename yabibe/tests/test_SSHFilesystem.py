@@ -6,7 +6,7 @@ import StringIO
 import json
 
 from yabibe.connectors.fs import SSHFilesystem
-from yabibe.exceptions import NoSuchCredential
+from yabibe.exceptions import CredentialNotFound
 
 def debug(*args, **kwargs):
     import sys
@@ -82,7 +82,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                                                                      "Not Found",
                                                                      "No Decrypted Credential Available" )))
     def test_Creds_fetch_non_existant_cred(self):
-        """test that a 404 error raises a NoSuchCredential"""
+        """test that a 404 error raises a CredentialNotFound"""
         sshfs = SSHFilesystem.SSHFilesystem()
-        with self.assertRaises( NoSuchCredential ):
+        with self.assertRaises( CredentialNotFound ):
             sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT

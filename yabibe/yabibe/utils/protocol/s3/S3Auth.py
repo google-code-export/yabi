@@ -2,7 +2,7 @@
 
 from yabibe.utils.geventtools import RetryGET, GETFailure, sleep
 import json, os
-from yabibe.exceptions import NoCredentials, AuthException
+from yabibe.exceptions import CredentialNotFound, AuthException
 from yabibe.conf import config
 import urllib
 
@@ -33,7 +33,7 @@ class S3Auth(object):
             gf_message = gf.args[0]
             if gf_message[0]==-1 and "404" in gf_message[1]:
                 # connection problems
-                raise NoCredentials( "User: %s does not have credentials for this user: %s backend: %s on host: %s\n"%(yabiusername,username,scheme,hostname) )
+                raise CredentialNotFound( "User: %s does not have credentials for this user: %s backend: %s on host: %s\n"%(yabiusername,username,scheme,hostname) )
             
             raise AuthException( "Tried to get credentials from %s:%d and failed: %s"%(config.yabiadminserver,config.yabiadminport,gf_message[1]) )
             
