@@ -7,7 +7,7 @@ import gevent
 from yabibe.conf import config
 from yabibe.utils.geventtools import GET, POST, GETFailure, RetryGET, RetryPOST
 from yabibe.utils.parsers import parse_url
-
+from yabibe.exceptions import NoSuchCredential
 
 COPY_RETRY = LINK_RETRY = LCOPY_RETRY = 5
 
@@ -275,8 +275,6 @@ def Resume(jobid, backend, command, callbackfunc=None, **kwargs):
     kwargs['uri']=backend
     POST(RESUME_PATH, jobid=jobid, command=command, datacallback=callbackfunc, **kwargs )
     
-class NoSuchCredential(Exception): pass
-    
 def UserCreds(yabiusername, uri, credtype="fs"):
     """Get a users credentials"""
     # see if we can get the credentials
@@ -290,8 +288,8 @@ def UserCreds(yabiusername, uri, credtype="fs"):
 
 def uriify(scheme,username,hostname,port=None,path=None):
     uri = "%s://%s@%s"%(scheme,username,hostname)
+    path = path or '/'
     if port:
         uri = "%s:%d"%(uri,port)
-    if path:
-        uri = "%s%s"%(uri,path)
+    uri = "%s%s"%(uri,path)
     return uri

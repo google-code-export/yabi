@@ -33,21 +33,22 @@ sshretry = SSHRetryController()
 class SSHHardError(Exception): pass
 class SSHSoftError(Exception): pass
 
-class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
+class SSHFilesystem(FSConnector.FSConnector, object):
     """This is the resource that connects to the ssh backends"""
     VERSION=0.1
     NAME="SSH Filesystem"
     copymode = "ssh"
     
-    def __init__(self):
-        FSConnector.FSConnector.__init__(self)
+    #def __init__(self):
+    #   FSConnector.FSConnector.__init__(self)
         
         # make a path to store keys in
-        configdir = config.config['backend']['certificates']
-        ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
+        #configdir = config.config['backend']['certificates']
+        #ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
         
         # instantiate a lock queue for this backend. Key refers to the particular back end. None is the global queue
-        self.lockqueue = LockQueue( MAX_SSH_CONNECTIONS )
+        # TODO: use context manager
+        #self.lockqueue = LockQueue( MAX_SSH_CONNECTIONS )
         
     def lock(self,*args,**kwargs):
         return self.lockqueue.lock(*args, **kwargs)
@@ -62,7 +63,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if priority:
             lock = self.lockqueue.lock()
         
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -109,7 +110,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if priority:
             lock = self.lockqueue.lock()
         
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, self.URI(username,host,port,path))
         usercert = self.save_identity(creds['key'])
         
         # we need to munge the path for transport over gsissh (cause it sucks)
@@ -159,7 +160,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if priority:
             lock = self.lockqueue.lock()
                 
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
         usercert = self.save_identity(creds['key'])
         
         # we need to munge the path for transport over gsissh (cause it sucks)
@@ -208,7 +209,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if priority:
             lock = self.lockqueue.lock()
         
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, self.URI(username, host, port, link) )
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -254,7 +255,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if priority:
             lock = self.lockqueue.lock()
         
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, dst)
         usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
         
         # we need to munge the path for transport over ssh (cause it sucks)
@@ -310,7 +311,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if DEBUG:
             print "SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, dst)
         usercert = self.save_identity(creds['key'])
         return ssh.Copy.WriteToRemote(usercert,dst,port=port,password=str(creds['password']),fifo=fifo)
         
@@ -328,7 +329,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if DEBUG:
             print "SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, dst)
         usercert = self.save_identity(creds['key'])
         return ssh.Copy.ReadFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
@@ -337,7 +338,7 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if DEBUG:
             print "SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, dst)
         usercert = self.save_identity(creds['key'])
         return ssh.Copy.ReadCompressedFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
@@ -346,10 +347,13 @@ class SSHFilesystem(FSConnector.FSConnector, ssh.KeyStore.KeyStore, object):
         if DEBUG:
             print "SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
-        creds = self.Creds(yabiusername, creds)
+        creds = self.Creds(yabiusername, creds, dst)
         usercert = self.save_identity(creds['key'])
         return ssh.Copy.WriteCompressedToRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
         
-    def Creds(self, yabiusername, creds):
+    def Creds(self, yabiusername, creds, uri):
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
-        return creds or UserCreds( yabiusername, uriify( SCHEMA, username, host, path=path), credtype="fs")
+        return creds or UserCreds( yabiusername, uri, credtype="fs")
+
+    def URI(self,user,hostname,port=None,path=None):
+        return uriify(SCHEMA, user, hostname, port, path)
