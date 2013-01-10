@@ -56,7 +56,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
     def unlock(self, tag):
         return self.lockqueue.unlock(tag)
         
-    @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
+    #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def mkdir(self, host, username, path, port=22, yabiusername=None, creds={},priority=0):
         # acquire our queue lock

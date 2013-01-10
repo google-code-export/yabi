@@ -38,7 +38,7 @@ class write_config(object):
 class SSHFilesystemTestSuite(unittest.TestCase):
     """Test SSHFilesystem"""
     def setUp(self):
-        pass
+        self.sshfs = SSHFilesystem.SSHFilesystem()
     
     def tearDown(self):
         pass
@@ -47,20 +47,18 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         sshfs = SSHFilesystem.SSHFilesystem()
 
     def test_URI(self):
-        sshfs = SSHFilesystem.SSHFilesystem()
-        self.assertEquals( sshfs.URI( "testuser", "testhost" ), "scp://testuser@testhost/" )
-        self.assertEquals( sshfs.URI( "testuser", "testhost", 2200 ),  "scp://testuser@testhost:2200/" )
-        self.assertEquals( sshfs.URI( "testuser", "testhost", 2200, "/some/path" ),  "scp://testuser@testhost:2200/some/path" )
-        self.assertEquals( sshfs.URI( "testuser", "testhost", path="/some/path" ),  "scp://testuser@testhost/some/path" )
-        self.assertEquals( sshfs.URI( "testuser", "testhost", path=None ),  "scp://testuser@testhost/" )
+        self.assertEquals( self.sshfs.URI( "testuser", "testhost" ), "scp://testuser@testhost/" )
+        self.assertEquals( self.sshfs.URI( "testuser", "testhost", 2200 ),  "scp://testuser@testhost:2200/" )
+        self.assertEquals( self.sshfs.URI( "testuser", "testhost", 2200, "/some/path" ),  "scp://testuser@testhost:2200/some/path" )
+        self.assertEquals( self.sshfs.URI( "testuser", "testhost", path="/some/path" ),  "scp://testuser@testhost/some/path" )
+        self.assertEquals( self.sshfs.URI( "testuser", "testhost", path=None ),  "scp://testuser@testhost/" )
 
     def test_Creds(self):
         # pass in creds and make sure we get them back
-        sshfs = SSHFilesystem.SSHFilesystem()
-        self.assertEquals( sshfs.Creds( 'yabiusername', {1:1,2:2}, None ), {1:1, 2:2} )
+        self.assertEquals( self.sshfs.Creds( 'yabiusername', {1:1,2:2}, None ), {1:1, 2:2} )
 
         with self.assertRaises( AssertionError ):
-            sshfs.Creds(None,None,None)
+            self.sshfs.Creds(None,None,None)
 
 
 
@@ -73,8 +71,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                                                                      json.dumps( DUMMY_CERT ))))
     def test_Creds_fetch(self):
         """test that when creds are asked for by username, they are fetched"""
-        sshfs = SSHFilesystem.SSHFilesystem()
-        self.assertTrue( sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT )
+        self.assertTrue( self.sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT )
 
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/'}} )
@@ -83,6 +80,10 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                                                                      "No Decrypted Credential Available" )))
     def test_Creds_fetch_non_existant_cred(self):
         """test that a 404 error raises a CredentialNotFound"""
-        sshfs = SSHFilesystem.SSHFilesystem()
         with self.assertRaises( CredentialNotFound ):
-            sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT
+            self.sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/'}} )
+    def test_mkdir(self):
+        """test mkdir on ssh filesystem"""
+        self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds='yabiuser')
