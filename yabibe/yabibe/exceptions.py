@@ -20,10 +20,6 @@ class IsADirectory(Exception):
     """pretty much only used where you try to delete a directory and dont use recurse"""
     pass
 
-class NoCredentials(BlockingException):
-    """User has no globus credentials for this server"""
-    pass
-
 class AuthException(BlockingException):
     pass
 
@@ -38,4 +34,7 @@ class NotImplemented(Exception):
     pass
 
 class ExecutionError(Exception):
+    pass
+
+class CredentialNotFound(Exception):
     pass

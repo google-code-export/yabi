@@ -15,6 +15,9 @@ vtest:
 coverage:
 	nosetests --with-coverage --cover-erase --cover-package=yabibe --cover-html --cover-branches ./tests/*.py
 
+quicktest:
+	nosetests --with-coverage --cover-erase --cover-package=yabibe --cover-html --cover-branches ./tests/test_SSHFilesystem.py
+
 egg: build
 	python setup.py bdist_egg
 
