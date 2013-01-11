@@ -9,11 +9,15 @@ class TempFile(object):
 
     def __enter__(self):
         """Write the data into a temporary location"""
-        self.fh, self.filename = tempfile.mkstemp(dir=self.path)
+        self.fd, self.filename = tempfile.mkstemp(dir=self.path)
+
+        self.fh = os.fdopen(self.fd,'w')
         self.fh.write(self.data)
         self.fh.close()
 
-    def __exit__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
         """Clean up this file"""
         os.unlink(self.filename)
 

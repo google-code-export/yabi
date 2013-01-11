@@ -1,12 +1,19 @@
+from yabibe.reactor import GeventReactor
+GeventReactor.install()
+
 import unittest2 as unittest
 from mock import MagicMock, patch
 import os
 import tempfile
 import StringIO
 import json
+import sys
+import gevent
 
 from yabibe.connectors.fs import SSHFilesystem
 from yabibe.exceptions import CredentialNotFound
+
+from twisted.internet import reactor
 
 def debug(*args, **kwargs):
     import sys
@@ -64,7 +71,9 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
     DUMMY_CERT =  {'user':'dummyuser',
                    'cert':'dummycert',
-                   'key':'dummykey'}
+                   'key':'dummykey',
+                   'username':'dummyusername',
+                   'password':'dummypasssword'}
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/'}} )
     @patch('yabibe.utils.geventtools.GET', MagicMock( return_value= (200,
                                                                      "OK",
@@ -83,7 +92,30 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         with self.assertRaises( CredentialNotFound ):
             self.sshfs.Creds('yabiusername', None, "scp://user@remotehost/path/"), self.DUMMY_CERT
 
-    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/'}} )
+    def run_reactor(self):
+        self._run = True
+        reactor.startRunning()
+        while self._run:
+            sys.stderr.write(".")
+            reactor.runUntilCurrent()
+            reactor.doIteration(1)
+            gevent.sleep()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    @patch('twisted.internet.reactor.spawnProcess', MagicMock())
     def test_mkdir(self):
         """test mkdir on ssh filesystem"""
-        self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds='yabiuser')
+        def threadlet():
+            debug("START")
+            res = self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds=self.DUMMY_CERT)
+            print "result"
+            print res
+
+            self._run = False
+
+        self._run = True
+
+        thread = gevent.spawn(threadlet)
+        reactor.mainLoop()
+        
+        self.assertTrue(False)

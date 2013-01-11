@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import gevent
 from yabibe.utils.LockQueue import LockQueue
@@ -10,6 +11,7 @@ from yabibe.exceptions import PermissionDenied, InvalidPath
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh
+from yabibe.utils.TempFile import TempFile
 from yabibe.server.resources.TaskManager.TaskTools import UserCreds, uriify
 
 sshauth = ssh.SSHAuth.SSHAuth()
@@ -60,21 +62,27 @@ class SSHFilesystem(FSConnector.FSConnector, object):
     #@call_count
     def mkdir(self, host, username, path, port=22, yabiusername=None, creds={},priority=0):
         # acquire our queue lock
-        if priority:
-            lock = self.lockqueue.lock()
-        
+        #if priority:
+        #    lock = self.lockqueue.lock()
+
+
+
+        #with self.lockqueue.lock():      
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
-        usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
-        
-        # we need to munge the path for transport over ssh (cause it sucks)
-        #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = ssh.Shell.mkdir(usercert,host,path, port=port, username=creds['username'], password=creds['password'])
-        
-        while not pp.isDone():
-            gevent.sleep()
+        sys.stderr.write("CREDS!%s\n"%creds)
+        with TempFile(creds['key']) as tf:
+            # we need to munge the path for transport over ssh (cause it sucks)
+            #mungedpath = '"' + path.replace('"',r'\"') + '"'
+            pp = ssh.Shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
+
+            sys.stderr.write("PROCESS PROTOCOL IS: %s\n"%(pp))
+
+            while not pp.isDone():
+                sys.stderr.write("-")
+                gevent.sleep()
             
-        if priority:
-            self.lockqueue.unlock(lock)
+        #if priority:
+        #    self.lockqueue.unlock(lock)
             
         err, out = pp.err, pp.out
         
