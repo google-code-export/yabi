@@ -109,7 +109,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
             try:
                 debug("START")
                 # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
-                self.sshfs.set_allow_all_hostkeys(True)
+                self.sshfs.set_check_knownhosts(True)
 
                 res = self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds=self.DUMMY_CERT)
                 

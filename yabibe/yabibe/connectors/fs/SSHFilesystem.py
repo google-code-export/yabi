@@ -54,8 +54,8 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         # TODO: use context manager
         #self.lockqueue = LockQueue( MAX_SSH_CONNECTIONS )
 
-    def set_allow_all_hostkeys(self, value):
-        self.shell.allow_all_hsotkeys = value
+    def set_check_knownhosts(self, value):
+        self.shell.check_knownhosts = value
         
     def lock(self,*args,**kwargs):
         return self.lockqueue.lock(*args, **kwargs)

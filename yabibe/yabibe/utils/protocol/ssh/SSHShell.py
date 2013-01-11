@@ -19,6 +19,7 @@ def convert_filename_to_encoded_for_echo(filename):
 class SSHShell(BaseShell):
     ssh_exec = os.path.join( os.path.dirname(os.path.realpath(__file__)), "paramiko-ssh.py" )
     python = sys.executable
+    check_knownhosts = False
     
     def _make_path(self):
         return "/usr/bin"    
@@ -41,6 +42,8 @@ class SSHShell(BaseShell):
         subenv['YABIADMIN'] = config.yabiadmin
         subenv['HMAC'] = config.config['backend']['hmackey']
         subenv['SSL_CERT_CHECK'] = str(config.config['backend']['admin_cert_check'])
+        if self.check_knownhosts:
+            subenv['CHECK_KNOWNHOSTS'] = "1"
         
         sshcommand = [self.python, self.ssh_exec ]
         sshcommand += ["-i",certfile] if certfile else []
@@ -69,7 +72,9 @@ class SSHShell(BaseShell):
         subenv['YABIADMIN'] = config.yabiadmin
         subenv['HMAC'] = config.config['backend']['hmackey']
         subenv['SSL_CERT_CHECK'] = str(config.config['backend']['admin_cert_check'])
-        
+        if self.check_knownhosts:
+            subenv['CHECK_KNOWNHOSTS'] = "1"
+            
         sshcommand = [self.python, self.ssh_exec ]
         sshcommand += ["-i",certfile] if certfile else []
         sshcommand += ["-p",password] if password else []
