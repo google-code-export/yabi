@@ -41,8 +41,10 @@ class SSHFilesystem(FSConnector.FSConnector, object):
     NAME="SSH Filesystem"
     copymode = "ssh"
     
-    #def __init__(self):
-    #   FSConnector.FSConnector.__init__(self)
+    def __init__(self):
+        FSConnector.FSConnector.__init__(self)
+
+        self.shell = ssh.SSHShell.SSHShell()
         
         # make a path to store keys in
         #configdir = config.config['backend']['certificates']
@@ -51,6 +53,9 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         # instantiate a lock queue for this backend. Key refers to the particular back end. None is the global queue
         # TODO: use context manager
         #self.lockqueue = LockQueue( MAX_SSH_CONNECTIONS )
+
+    def set_allow_all_hostkeys(self, value):
+        self.shell.allow_all_hsotkeys = value
         
     def lock(self,*args,**kwargs):
         return self.lockqueue.lock(*args, **kwargs)
@@ -69,16 +74,12 @@ class SSHFilesystem(FSConnector.FSConnector, object):
 
         #with self.lockqueue.lock():      
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
-        sys.stderr.write("CREDS!%s\n"%creds)
         with TempFile(creds['key']) as tf:
             # we need to munge the path for transport over ssh (cause it sucks)
             #mungedpath = '"' + path.replace('"',r'\"') + '"'
-            pp = ssh.Shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
-
-            sys.stderr.write("PROCESS PROTOCOL IS: %s\n"%(pp))
+            pp = self.shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
 
             while not pp.isDone():
-                sys.stderr.write("-")
                 gevent.sleep()
             
         #if priority:
@@ -123,7 +124,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
         # we need to munge the path for transport over gsissh (cause it sucks)
         #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = ssh.Shell.rm(usercert,host,path, port=port,args="-rf" if recurse else "-f", username=creds['username'], password=creds['password'])
+        pp = self.shell.rm(usercert,host,path, port=port,args="-rf" if recurse else "-f", username=creds['username'], password=creds['password'])
         
         while not pp.isDone():
             gevent.sleep()
@@ -174,7 +175,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         # we need to munge the path for transport over gsissh (cause it sucks)
         #mungedpath = '"' + path.replace('"',r'\"') + '"'
         #print "===>LS",usercert,host,path, port, "-lFR" if recurse else "-lF", creds['username'], creds['password']
-        pp = ssh.Shell.ls(usercert,host,path, port=port, recurse=recurse, username=creds['username'], password=creds['password'] )
+        pp = self.shell.ls(usercert,host,path, port=port, recurse=recurse, username=creds['username'], password=creds['password'] )
         
         while not pp.isDone():
             gevent.sleep()
@@ -222,7 +223,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
         # we need to munge the path for transport over ssh (cause it sucks)
         #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = ssh.Shell.ln(usercert,host,target, link, port=port, username=creds['username'], password=creds['password'])
+        pp = self.shell.ln(usercert,host,target, link, port=port, username=creds['username'], password=creds['password'])
         
         while not pp.isDone():
             gevent.sleep()
@@ -268,7 +269,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
         # we need to munge the path for transport over ssh (cause it sucks)
         #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = ssh.Shell.cp(usercert,host,src, dst, args="-r" if recurse else None, port=port, username=creds['username'], password=creds['password'])
+        pp = self.shell.cp(usercert,host,src, dst, args="-r" if recurse else None, port=port, username=creds['username'], password=creds['password'])
         
         while not pp.isDone():
             gevent.sleep()

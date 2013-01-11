@@ -102,20 +102,25 @@ class SSHFilesystemTestSuite(unittest.TestCase):
             gevent.sleep()
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
-    @patch('twisted.internet.reactor.spawnProcess', MagicMock())
+    #@patch('twisted.internet.reactor.spawnProcess', MagicMock())
     def test_mkdir(self):
         """test mkdir on ssh filesystem"""
         def threadlet():
-            debug("START")
-            res = self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds=self.DUMMY_CERT)
-            print "result"
-            print res
+            try:
+                debug("START")
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_allow_all_hostkeys(True)
 
-            self._run = False
+                res = self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds=self.DUMMY_CERT)
+                
+                print "result"
+                print res
 
-        self._run = True
+            finally:
+                reactor.stop()
 
+        
         thread = gevent.spawn(threadlet)
-        reactor.mainLoop()
+        reactor.run()
         
         self.assertTrue(False)
