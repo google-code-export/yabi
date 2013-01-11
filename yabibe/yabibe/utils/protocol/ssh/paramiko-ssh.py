@@ -42,7 +42,7 @@ BLOCK_SIZE = 512
 
 KNOWN_HOSTS_FILE = "~/.ssh/known_hosts"
 
-CHECK_KNOWN_HOSTS = True
+CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', False)
 
 #disable any SSH agent that was lingering on the terminal when this is run
 if 'SSH_AUTH_SOCK' in os.environ:
