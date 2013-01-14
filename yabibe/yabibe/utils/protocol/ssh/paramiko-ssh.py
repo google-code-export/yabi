@@ -43,6 +43,7 @@ BLOCK_SIZE = 512
 KNOWN_HOSTS_FILE = "~/.ssh/known_hosts"
 
 CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', False)
+CHECK_KNOWN_HOSTS = True
 
 #disable any SSH agent that was lingering on the terminal when this is run
 if 'SSH_AUTH_SOCK' in os.environ:
@@ -62,7 +63,7 @@ def main():
     sanity_check(options)
     
     # load our known hosts
-    if yabiadmin:
+    if not CHECK_KNOWN_HOSTS:
         known_hosts = load_known_hosts_from_admin(options.hostname)
     else:
         known_hosts = load_known_hosts(os.path.expanduser(KNOWN_HOSTS_FILE))
