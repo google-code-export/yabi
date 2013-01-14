@@ -74,10 +74,20 @@ class SSHFilesystem(FSConnector.FSConnector, object):
 
         #with self.lockqueue.lock():      
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
-        with TempFile(creds['key']) as tf:
-            # we need to munge the path for transport over ssh (cause it sucks)
-            #mungedpath = '"' + path.replace('"',r'\"') + '"'
-            pp = self.shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
+
+        # cert login:
+        if 'key' in creds:
+            with TempFile(creds['key']) as tf:
+                # we need to munge the path for transport over ssh (cause it sucks)
+                #mungedpath = '"' + path.replace('"',r'\"') + '"'
+                pp = self.shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
+
+                while not pp.isDone():
+                    gevent.sleep()
+
+        # password login
+        else:
+            pp = self.shell.mkdir(None, host,path, port=port, username=creds['username'], password=creds['password'])
 
             while not pp.isDone():
                 gevent.sleep()
@@ -105,9 +115,6 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         if DEBUG:
             print "mkdir_data=",out
             print "err", err
-
-        if usercert:
-            os.unlink(usercert)
 
         return out
         

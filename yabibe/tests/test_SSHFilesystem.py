@@ -101,6 +101,12 @@ class SSHFilesystemTestSuite(unittest.TestCase):
             reactor.doIteration(1)
             gevent.sleep()
 
+
+
+    USER_CERT =  {'user':os.environ.get("TESTUSER","dummyuser"),
+                   'username':os.environ.get('USER','dummyusername'),
+                   'password':os.environ.get('PASSWORD','dummypasssword')}
+
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     #@patch('twisted.internet.reactor.spawnProcess', MagicMock())
     def test_mkdir(self):
@@ -111,7 +117,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
                 self.sshfs.set_check_knownhosts(True)
 
-                res = self.sshfs.mkdir("localhost","localuser","/tmp/testmkdir", creds=self.DUMMY_CERT)
+                res = self.sshfs.mkdir("localhost",os.environ.get("USER",'dummyusername'),"/tmp/testmkdir", creds=self.USER_CERT)
                 
                 print "result"
                 print res
