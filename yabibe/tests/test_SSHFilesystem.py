@@ -8,8 +8,12 @@ import tempfile
 import StringIO
 import json
 import sys
+import random
 import gevent
+import time
 
+from config import TestConfig
+                
 from yabibe.connectors.fs import SSHFilesystem
 from yabibe.exceptions import CredentialNotFound
 
@@ -44,12 +48,20 @@ class write_config(object):
 
 class SSHFilesystemTestSuite(unittest.TestCase):
     """Test SSHFilesystem"""
+    testdir="/tmp/yabi-ssh-filesystem-unit-test"
+    
     def setUp(self):
+        if os.path.exists(self.testdir):
+            os.system("sudo rm -rf '%s'"%self.testdir)
+        os.makedirs(self.testdir)
+        os.chmod(self.testdir,0777)
         self.sshfs = SSHFilesystem.SSHFilesystem()
     
     def tearDown(self):
-        pass
-        
+        # for some reason our gevent reactor has some problems restarting. Thinks it's already started. So we just tell it its stopped here.
+        # its up to each test to stop and start the reactor. This ensures clean deferred status on entry and exit
+        reactor._started = False
+            
     def test_construct(self):
         sshfs = SSHFilesystem.SSHFilesystem()
 
@@ -108,25 +120,122 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                    'password':os.environ.get('PASSWORD','dummypasssword')}
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
-    #@patch('twisted.internet.reactor.spawnProcess', MagicMock())
     def test_mkdir(self):
         """test mkdir on ssh filesystem"""
         def threadlet():
             try:
-                debug("START")
                 # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
                 self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+                path = os.path.join(self.testdir,"directory")
 
-                res = self.sshfs.mkdir("localhost",os.environ.get("USER",'dummyusername'),"/tmp/testmkdir", creds=self.USER_CERT)
+                res = self.sshfs.mkdir("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                         'username':tc['username'],
+                                                                         'password':tc['password'] } )
                 
-                print "result"
-                print res
+                # when mkdir succeeds its output is nothing
+                self.assertFalse( res.strip() )
+
+                # make sure the directory is there
+                self.assertTrue( os.path.exists(path) )
+                self.assertTrue( os.path.isdir(path) )
 
             finally:
                 reactor.stop()
-
-        
+                
         thread = gevent.spawn(threadlet)
         reactor.run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_mkdir_permission_denied(self):
+        """test mkdir on ssh filesystem that we don't have write permissions on"""
+        # turn off world writable
+        os.chmod( self.testdir, 0755)
+
+        from yabibe.exceptions import PermissionDenied
         
-        self.assertTrue(False)
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+                path = os.path.join(self.testdir,"directory")
+
+                with self.assertRaises( PermissionDenied ):
+                    res = self.sshfs.mkdir("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                   'username':tc['username'],
+                                                                                   'password':tc['password'] } )
+                
+            finally:
+                reactor.stop()
+                
+        thread = gevent.spawn(threadlet)
+        reactor.run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_mkdir_creates_all_parents(self):
+        """test mkdir on ssh filesystem where the path to create in does not exist"""
+        # turn off world writable
+        path = os.path.join(self.testdir,"doesnotexist","full","path","to","directory")
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                #with self.assertRaises( InvalidPath ):
+                res = self.sshfs.mkdir("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                   'username':tc['username'],
+                                                                                   'password':tc['password'] } )
+                # when mkdir succeeds its output is nothing
+                self.assertFalse( res.strip() )
+
+                # make sure the directory is there
+                self.assertTrue( os.path.exists(path) )
+                self.assertTrue( os.path.isdir(path) )
+                
+            finally:
+                reactor.stop()
+                
+        thread = gevent.spawn(threadlet)
+        reactor.run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_rm_file_with_no_recurse(self):
+        """test a plain deletion of a file"""
+        # turn off world writable
+        path = os.path.join(self.testdir,"testfile.dat")
+        with open(path, 'wb') as fh:
+            for i in range(256):
+                data = "".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                  for X in range(256) ] )
+                fh.write(data)
+                
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is there
+                self.assertTrue(os.path.exists(path))
+                self.assertTrue(os.path.isfile(path))
+
+                #with self.assertRaises( InvalidPath ):
+                res = self.sshfs.rm("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                   'username':tc['username'],
+                                                                                   'password':tc['password'] } )
+
+                # when rm succeeds its output is nothing
+                self.assertFalse( res.strip() )
+
+                # make sure the file is gone
+                self.assertFalse( os.path.exists(path) )
+                
+            finally:
+                reactor.stop()
+                
+        thread = gevent.spawn(threadlet)
+        reactor.run()
+
