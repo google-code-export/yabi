@@ -62,6 +62,26 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
     def unlock(self, tag):
         return self.lockqueue.unlock(tag)
+
+    def execute_and_wait(self, creds, callable, *arguments, **kwarguments):
+        """given the credentials 'creds', run callable passing in args and kwargs and then wait for the pp to be done.
+        then return the result"""
+        # key login
+        if 'key' in creds:
+            with TempFile(creds['key']) as tf:
+                pp = callable(tf.filename, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
+
+                while not pp.isDone():
+                    gevent.sleep()
+
+        # password login
+        else:
+            pp = callable(None, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
+
+            while not pp.isDone():
+                gevent.sleep()
+
+        return pp
         
     #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
@@ -69,29 +89,11 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         # acquire our queue lock
         #if priority:
         #    lock = self.lockqueue.lock()
-
-
-
         #with self.lockqueue.lock():      
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
 
-        # cert login:
-        if 'key' in creds:
-            with TempFile(creds['key']) as tf:
-                # we need to munge the path for transport over ssh (cause it sucks)
-                #mungedpath = '"' + path.replace('"',r'\"') + '"'
-                pp = self.shell.mkdir(tf.filename, host,path, port=port, username=creds['username'], password=creds['password'])
+        pp = self.execute_and_wait( creds, self.shell.mkdir, host, path, port=port )
 
-                while not pp.isDone():
-                    gevent.sleep()
-
-        # password login
-        else:
-            pp = self.shell.mkdir(None, host,path, port=port, username=creds['username'], password=creds['password'])
-
-            while not pp.isDone():
-                gevent.sleep()
-            
         #if priority:
         #    self.lockqueue.unlock(lock)
             
@@ -119,25 +121,19 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         return out
         
     #@lock
-    @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
+    #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def rm(self, host, username, path, port=22, yabiusername=None, recurse=False, creds={}, priority=0):
         # acquire our queue lock
-        if priority:
-            lock = self.lockqueue.lock()
+        #if priority:
+        #    lock = self.lockqueue.lock()
         
         creds = self.Creds(yabiusername, creds, self.URI(username,host,port,path))
-        usercert = self.save_identity(creds['key'])
+
+        pp = self.execute_and_wait( creds, self.shell.rm, host, path, port=port, args="-rf" if recurse else "-f" )
         
-        # we need to munge the path for transport over gsissh (cause it sucks)
-        #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = self.shell.rm(usercert,host,path, port=port,args="-rf" if recurse else "-f", username=creds['username'], password=creds['password'])
-        
-        while not pp.isDone():
-            gevent.sleep()
-        
-        if priority:
-            self.lockqueue.unlock(lock)
+        ## if priority:
+        ##     self.lockqueue.unlock(lock)
             
         err, out = pp.err, pp.out
         
@@ -159,9 +155,6 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         if DEBUG:
             print "rm_data=",out
             print "err", err
-
-        if usercert:
-            os.unlink(usercert)
 
         return out
     

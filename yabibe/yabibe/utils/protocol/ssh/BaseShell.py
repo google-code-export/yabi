@@ -2,7 +2,7 @@ import os
 from twisted.internet import protocol
 from twisted.internet import reactor
     
-DEBUG = True
+DEBUG = False
     
 class BaseShellProcessProtocol(protocol.ProcessProtocol):
     def __init__(self, stdin=None):
@@ -77,13 +77,13 @@ class BaseShell(object):
 
         subenv = env or self._make_env()
         if DEBUG:
-            print "env",subenv
+            #print "env",subenv
             print "exec:",command
-            print  [pp,
-                                command[0],
-                                command,
-                                subenv,
-                                self._make_path()]
+            #print  [pp,
+            #                    command[0],
+            #                    command,
+            #                    subenv,
+            #                    self._make_path()]
             
         reactor.spawnProcess(   pp,
                                 command[0],
