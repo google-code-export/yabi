@@ -445,6 +445,7 @@ def execute(ssh,options,shell=True, ex=None):
                 
         # exhaust stdout/stderr
         stdout_channel.write( stdout.read() )
+        sys.stderr.write( stderr.read() )
                 
         if options.stdout:
             stdout_channel.close()
