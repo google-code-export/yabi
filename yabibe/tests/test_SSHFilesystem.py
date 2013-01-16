@@ -15,7 +15,7 @@ import time
 from config import TestConfig
                 
 from yabibe.connectors.fs import SSHFilesystem
-from yabibe.exceptions import CredentialNotFound
+from yabibe.exceptions import CredentialNotFound, IsADirectory, PermissionDenied, InvalidPath
 
 from twisted.internet import reactor
 
@@ -58,9 +58,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         self.sshfs = SSHFilesystem.SSHFilesystem()
     
     def tearDown(self):
-        # for some reason our gevent reactor has some problems restarting. Thinks it's already started. So we just tell it its stopped here.
-        # its up to each test to stop and start the reactor. This ensures clean deferred status on entry and exit
-        reactor._started = False
+        pass
             
     def test_construct(self):
         sshfs = SSHFilesystem.SSHFilesystem()
@@ -106,13 +104,22 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
     def run_reactor(self):
         self._run = True
-        reactor.startRunning()
+        try:
+            reactor.startRunning()
+        except Exception:
+            pass
         while self._run:
-            sys.stderr.write(".")
-            reactor.runUntilCurrent()
-            reactor.doIteration(1)
-            gevent.sleep()
+            #sys.stderr.write("+")
+            if reactor.doInner():
+                #sys.stderr.write("break!")
+                break
+        self._run = False
 
+    def reactor_stop(self):
+        self._run = False
+
+    def reactor_run(self):
+        self.run_reactor()
 
 
     USER_CERT =  {'user':os.environ.get("TESTUSER","dummyuser"),
@@ -141,10 +148,10 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.assertTrue( os.path.isdir(path) )
 
             finally:
-                reactor.stop()
+                self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        reactor.run()
+        self.reactor_run()
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_mkdir_permission_denied(self):
@@ -152,7 +159,6 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         # turn off world writable
         os.chmod( self.testdir, 0755)
 
-        from yabibe.exceptions import PermissionDenied
         
         def threadlet():
             try:
@@ -167,15 +173,14 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                                                                                    'password':tc['password'] } )
                 
             finally:
-                reactor.stop()
+                self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        reactor.run()
+        self.reactor_run()
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_mkdir_creates_all_parents(self):
         """test mkdir on ssh filesystem where the path to create in does not exist"""
-        # turn off world writable
         path = os.path.join(self.testdir,"doesnotexist","full","path","to","directory")
 
         def threadlet():
@@ -196,15 +201,14 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.assertTrue( os.path.isdir(path) )
                 
             finally:
-                reactor.stop()
+                self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        reactor.run()
+        self.reactor_run()
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_file_with_no_recurse(self):
         """test a plain deletion of a file"""
-        # turn off world writable
         path = os.path.join(self.testdir,"testfile.dat")
         with open(path, 'wb') as fh:
             for i in range(256):
@@ -234,8 +238,334 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.assertFalse( os.path.exists(path) )
                 
             finally:
-                reactor.stop()
+                self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        reactor.run()
+        self.reactor_run()
 
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_rm_path_with_no_recurse(self):
+        """test trying to delete a directory without recurse"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+        os.chmod(path, 0755)
+                        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is there
+                self.assertTrue(os.path.exists(path))
+                self.assertTrue(os.path.isdir(path))
+                
+                with self.assertRaises( IsADirectory ):
+                    res = self.sshfs.rm("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                'username':tc['username'],
+                                                                                'password':tc['password'] } )
+                # directory should still be there
+                self.assertTrue(os.path.exists(path))
+                self.assertTrue(os.path.isdir(path))
+
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_rm_path_with_recurse(self):
+        """test trying to delete a directory with recurse"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+        os.chmod(path, 0755)
+                        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is there
+                self.assertTrue(os.path.exists(path))
+                self.assertTrue(os.path.isdir(path))
+                
+                res = self.sshfs.rm("localhost",tc['username'],path, recurse=True, creds={'user':tc['username'],
+                                                                                          'username':tc['username'],
+                                                                                          'password':tc['password'] } )
+                # success returns nothing
+                self.assertFalse(res.strip())
+                
+                # directory should still be there
+                self.assertFalse(os.path.exists(path))
+                self.assertFalse(os.path.isdir(path))
+
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_rm_file_without_permissions(self):
+        """test a deletion of a file we don't have permission to delete"""
+        path = os.path.join(self.testdir,"testfile.dat")
+        with open(path, 'wb') as fh:
+            for i in range(256):
+                data = "".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                  for X in range(256) ] )
+                fh.write(data)
+                
+        # unwritable as shell user (but writable as test runner)
+        os.chmod(path,0755)
+        os.chmod(self.testdir, 0755)
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is there
+                self.assertTrue(os.path.exists(path))
+                self.assertTrue(os.path.isfile(path))
+
+                with self.assertRaises( PermissionDenied ):
+                    res = self.sshfs.rm("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                'username':tc['username'],
+                                                                                'password':tc['password'] } )
+
+                # make sure the file is still there
+                self.assertTrue( os.path.exists(path) )
+                self.assertTrue( os.path.isfile(path) )
+
+                # try again with recurse. Should have no effect
+                with self.assertRaises( PermissionDenied ):
+                    res = self.sshfs.rm("localhost",tc['username'],path, recurse=True, creds={'user':tc['username'],
+                                                                                              'username':tc['username'],
+                                                                                              'password':tc['password'] } )
+
+                # make sure the file is still there
+                self.assertTrue( os.path.exists(path) )
+                self.assertTrue( os.path.isfile(path) )
+
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+    
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_rm_nonexisting_path(self):
+        """test trying to delete a path that does not exist"""
+        path = "/file/path/that/does/not/exist/123456756"
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is not there
+                self.assertFalse(os.path.exists(path))
+
+                # because our rm is "-f" (force), this call should succeed
+                res = self.sshfs.rm("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                            'username':tc['username'],
+                                                                            'password':tc['password'] } )
+                # success returns nothing
+                self.assertFalse(res.strip())
+                
+                # directory should still not be there
+                self.assertFalse(os.path.exists(path))
+
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ls_non_existing_path(self):
+        """test trying to list a path that does not exist"""
+        path = "/file/path/that/does/not/exist/123456756"
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is not there
+                self.assertFalse(os.path.exists(path))
+
+                with self.assertRaises(InvalidPath):
+                    res = self.sshfs.ls("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                                'username':tc['username'],
+                                                                                'password':tc['password'] } )
+               
+                # directory should still not be there
+                self.assertFalse(os.path.exists(path))
+
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ls_existing_path(self):
+        """test trying to list a path that we've created"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+        os.chmod(path, 0755)
+
+        subdirs = ( '1', '2', 'test' )
+
+        for subpath in subdirs:
+            os.makedirs( os.path.join( path, subpath ) )
+            os.chmod( os.path.join( path, subpath ), 0755 )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is present
+                self.assertTrue(os.path.exists(path))
+
+                res = self.sshfs.ls("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                            'username':tc['username'],
+                                                                            'password':tc['password'] } )
+
+                # TODO: the rest return strings. This returns dict. Some unification should be done between ls/mkdir/rm etc
+                self.assertTrue( path in res )
+                r = res[path]                  #move inside dicrionary for this path
+                
+                self.assertTrue( 'files' in r )
+                self.assertTrue( 'directories' in r )
+                self.assertEquals( len(r['directories']), 3 )
+                for entry in r['directories']:
+                    # should not be a symlink
+                    self.assertFalse( entry[3] )
+
+                    # first should be directory name
+                    self.assertTrue( entry[0] in subdirs )
+              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ls_recursive_path(self):
+        """test trying to recursively list a multi level path that we've created"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+        os.chmod(path, 0755)
+
+        subdirs = ( '1', '2', 'test', "1/blah", "2/temp", "1/blah/bing" )
+
+        for subpath in subdirs:
+            os.makedirs( os.path.join( path, subpath ) )
+            os.chmod( os.path.join( path, subpath ), 0755 )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is present
+                self.assertTrue(os.path.exists(path))
+
+                res = self.sshfs.ls("localhost",tc['username'],path, recurse=True, creds={'user':tc['username'],
+                                                                            'username':tc['username'],
+                                                                            'password':tc['password'] } )
+
+                # TODO: the rest return strings. This returns dict. Some unification should be done between ls/mkdir/rm etc
+                self.assertTrue( path in res )
+                r = res[path]                  #move inside dicrionary for this path
+                
+                self.assertTrue( 'files' in r )
+                self.assertTrue( 'directories' in r )
+                self.assertEquals( len(r['directories']), 3 )
+                for entry in r['directories']:
+                    # should not be a symlink
+                    self.assertFalse( entry[3] )
+
+                    # first should be directory name
+                    self.assertTrue( entry[0] in ('1','2','test') )
+
+                # now look for the other directories. They all must be here
+                keys = res.keys()
+                for d in subdirs:
+                    keys.remove(os.path.join(path, d))
+                keys.remove(path)
+
+                # there should be no other directories listed but these
+                self.assertEquals( len(keys), 0 )
+              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    
+    
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ls_existing_path_with_files(self):
+        """test trying to list a path that we've created that also has some files in it"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+        os.chmod(path, 0755)
+
+        files = ( '1.dat', '2.doc', 'test.txt' )
+
+        for filename in files:
+            fpath = os.path.join(path,filename)
+            with open(fpath, 'wb') as fh:
+                for i in range(256):
+                    data = "".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                      for X in range(256) ] )
+                    fh.write(data)
+            
+            os.chmod( fpath, 0755 )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is present
+                self.assertTrue(os.path.exists(path))
+
+                res = self.sshfs.ls("localhost",tc['username'],path, creds={'user':tc['username'],
+                                                                            'username':tc['username'],
+                                                                            'password':tc['password'] } )
+
+                # TODO: the rest return strings. This returns dict. Some unification should be done between ls/mkdir/rm etc
+                self.assertTrue( path in res )
+                r = res[path]                  #move inside dicrionary for this path
+                
+                self.assertTrue( 'files' in r )
+                self.assertTrue( 'directories' in r )
+                self.assertEquals( len(r['files']), 3 )
+                for entry in r['files']:
+                    # should not be a symlink
+                    self.assertFalse( entry[3] )
+
+                    # first should be directory name
+                    self.assertTrue( entry[0] in files )
+              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
