@@ -297,45 +297,50 @@ class GeventReactor(posixbase.PosixReactorBase):
     def mainLoop(self):
         """This main loop yields to gevent until the end, handling function calls along the way."""
         self.greenlet = gevent.getcurrent()
-        callqueue = self._callqueue
-        seconds = self.seconds
         try:
             while 1:
-                self._wait = 0
-                now = seconds()
-                if len(callqueue) > 0:
-                    self._wake = delay = callqueue[0].time
-                    delay -= now
-                else:
-                    self._wake = now+300
-                    delay = 300
-                try:
-                    self._wait = 1
-                    gevent.sleep(max(0,delay))
-                    self._wait = 0
-                except Reschedule:
-                    continue
-                now = seconds()
-                while 1:
-                    try:
-                        c = callqueue[0]
-                    except IndexError:
-                        break
-                    if c.time <= now:
-                        del callqueue[0]
-                        try:
-                            c()
-                        except GreenletExit:
-                            raise
-                        except:
-                            log.msg('Unexpected error in main loop.')
-                            log.err()
-                    else:
-                        break
+                if self.doInner():
+                    break
         except (GreenletExit,KeyboardInterrupt):
             pass
         log.msg('Main loop terminated.')
         self.fireSystemEvent('shutdown')
+
+    def doInner(self):          
+        self._wait = 0
+        now = self.seconds()
+        if len(self._callqueue) > 0:
+            self._wake = delay = self._callqueue[0].time
+            delay -= now
+        else:
+            self._wake = now+1
+            delay = 1
+        try:
+            self._wait = 1
+            #sys.stderr.write("!(%d)"%delay)
+            gevent.sleep(max(0,delay))
+            self._wait = 0
+        except Reschedule:
+            return
+        now = self.seconds()
+        while 1:
+            #sys.stderr.write(",")
+            try:
+                c = self._callqueue[0]
+            except IndexError:
+                break
+            if c.time <= now:
+                del self._callqueue[0]
+                try:
+                    c()
+                except GreenletExit:
+                    raise
+                except:
+                    log.msg('Unexpected error in main loop.')
+                    log.err()
+            else:
+                return True
+ 
     def addReader(self,selectable):
         """Add a FileDescriptor for notification of data available to read."""
         try:
