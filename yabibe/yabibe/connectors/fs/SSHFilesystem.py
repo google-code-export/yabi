@@ -7,7 +7,7 @@ from yabibe.utils.LockQueue import LockQueue
 from yabibe.utils.RetryController import SSHRetryController, HARD
 
 import FSConnector
-from yabibe.exceptions import PermissionDenied, InvalidPath
+from yabibe.exceptions import PermissionDenied, InvalidPath, IsADirectory
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh
@@ -72,14 +72,14 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 pp = callable(tf.filename, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
 
                 while not pp.isDone():
-                    gevent.sleep()
+                    gevent.sleep(1.0)
 
         # password login
         else:
             pp = callable(None, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
 
             while not pp.isDone():
-                gevent.sleep()
+                gevent.sleep(1.0)
 
         return pp
         
@@ -143,6 +143,8 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 raise PermissionDenied(err)
             elif "No such file or directory" in err:
                 raise InvalidPath("No such file or directory\n")
+            elif "Is a directory" in err:
+                raise IsADirectory("Cannot remove directory without recurse option")
             else:
                 # hard or soft error?
                 error_type = sshretry.test(pp.exitcode, pp.err)
@@ -159,30 +161,23 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         return out
     
     #@lock
-    @retry(5,(InvalidPath,PermissionDenied, SSHHardError))                            
+    #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))                            
     #@call_count
     def ls(self, host, username, path, port=22, yabiusername=None, recurse=False, culldots=True, creds={}, priority=0):
         if DEBUG:
             print "SSHFilesystem::ls(",host,username,path,port,yabiusername,recurse,culldots,creds,priority,")"
         
         # acquire our queue lock
-        if priority:
-            lock = self.lockqueue.lock()
+        #if priority:
+        #    lock = self.lockqueue.lock()
                 
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, path) )
-        usercert = self.save_identity(creds['key'])
-        
-        # we need to munge the path for transport over gsissh (cause it sucks)
-        #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        #print "===>LS",usercert,host,path, port, "-lFR" if recurse else "-lF", creds['username'], creds['password']
-        pp = self.shell.ls(usercert,host,path, port=port, recurse=recurse, username=creds['username'], password=creds['password'] )
-        
-        while not pp.isDone():
-            gevent.sleep()
-            
+
+        pp = self.execute_and_wait( creds, self.shell.ls, host, path, port=port, recurse=recurse )
+           
         # release our queue lock
-        if priority:
-            self.lockqueue.unlock(lock)
+        #if priority:
+        #    self.lockqueue.unlock(lock)
             
         err, out = pp.err, pp.out
         
@@ -206,9 +201,6 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         except ValueError, ve:
             raise SSHHardError("Could not list directory: Paramiko script returned malformed JSON data.")
         
-        if usercert:
-            os.unlink(usercert)
-                        
         return ls_data
         
     @retry(5,(InvalidPath,PermissionDenied, SSHHardError))

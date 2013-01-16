@@ -58,9 +58,14 @@ SSL_CERT_CHECK = os.environ.get("SSL_CERT_CHECK","true").lower() == "true"
 assert 'HMAC' in os.environ
 hmac_key = os.environ['HMAC']
 
+def debug(*args,**kwargs):
+    sys.stderr.write("<"+(",".join([str(a) for a in args]))+(",".join(["%s=>%s"%(k,v) for k,v in kwargs.iteritems()]))+">")
+
 def main():
     options, arguments = parse_args()
     sanity_check(options)
+
+    #debug(options)
     
     # load our known hosts
     if not CHECK_KNOWN_HOSTS:
@@ -315,7 +320,7 @@ def ssh_connect_login(options, known_hosts):
 
 def transport_connect_login(options, known_hosts):
     ssh = paramiko.Transport((options.hostname, 22))
-    
+
     if options.identity:    
         try:
             mykey = get_rsa_key(options)
