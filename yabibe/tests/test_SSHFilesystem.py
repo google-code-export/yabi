@@ -569,3 +569,461 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 
         thread = gevent.spawn(threadlet)
         self.reactor_run()
+
+    def createfile(self,filename, kb=1):
+        with open(filename, 'wb') as fh:
+            for i in range(kb):
+                fh.write("".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                      for X in range(1024) ] ))
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ln_creation_in_restricted_directory(self):
+        """test trying to sym-link to a file but we can't write in our symlink dir"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we have no rights to write a symlink into this directory
+        os.chmod(path, 0755)
+
+        # target
+        tpath = os.path.join( path, "target.dat" ) 
+        self.createfile(tpath)
+
+        # link
+        lpath = os.path.join( path, "source.dat" )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is present
+                self.assertTrue(os.path.exists(tpath))
+
+                with self.assertRaises(PermissionDenied):
+                    self.sshfs.ln("localhost",tc['username'],tpath, lpath, creds={'user':tc['username'],
+                                                                                  'username':tc['username'],
+                                                                                  'password':tc['password'] } )
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ln_creation(self):
+        """test trying to sym-link to a file"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # target
+        tpath = os.path.join( path, "target.dat" ) 
+        self.createfile(tpath)
+
+        # link
+        lpath = os.path.join( path, "source.dat" )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is present
+                self.assertTrue(os.path.exists(tpath))
+
+                res = self.sshfs.ln("localhost",tc['username'],tpath, lpath, creds={'user':tc['username'],
+                                                                                    'username':tc['username'],
+                                                                                    'password':tc['password'] } )
+
+                self.assertFalse( res.strip() )
+
+                # test for symlink
+                self.assertTrue( os.path.exists(lpath) )
+                self.assertTrue( os.path.islink(lpath) )
+
+                # link should point where we asked it to
+                self.assertEquals( os.readlink(lpath), tpath )
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_ln_creation_to_non_existing_path(self):
+        """test trying to sym-link to a missing file"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # target
+        tpath = os.path.join( path, "target.dat" ) 
+        
+        # link
+        lpath = os.path.join( path, "source.dat" )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is absent
+                self.assertFalse(os.path.exists(tpath))
+
+                # our ln is symbolic so it doesn't return any error on a non existing path
+                res = self.sshfs.ln("localhost",tc['username'],tpath, lpath, creds={'user':tc['username'],
+                                                                                    'username':tc['username'],
+                                                                                    'password':tc['password'] } )
+
+                self.assertFalse( res.strip() )
+
+                # test for symlink
+                self.assertFalse( os.path.exists(lpath) )
+                self.assertTrue( os.path.islink(lpath) )
+
+                # link should point where we asked it to (which doesn't exist)
+                self.assertEquals( os.readlink(lpath), tpath )
+
+                # opening it should error
+                with self.assertRaises(IOError):
+                    open(lpath, 'r')
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_non_existing_path(self):
+        """test trying to copy a missing file"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # dest and source
+        dpath = os.path.join( path, "dest.dat" ) 
+        spath = os.path.join( path, "source.dat" )
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure directory is absent
+                self.assertFalse(os.path.exists(spath))
+
+                # should raise InvalidPath exception
+                with self.assertRaises(InvalidPath):
+                    self.sshfs.cp("localhost",tc['username'],spath, dpath, creds={'user':tc['username'],
+                                                                                  'username':tc['username'],
+                                                                                  'password':tc['password'] } )
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_existing_file(self):
+        """copy a file"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # dest and source
+        dpath = os.path.join( path, "dest.dat" ) 
+        spath = os.path.join( path, "source.dat" )
+        self.createfile(spath,kb=128)
+
+        # we need to read this file to copy it
+        os.chmod(spath,0755)
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                res = self.sshfs.cp("localhost",tc['username'],spath, dpath, creds={'user':tc['username'],
+                                                                                    'username':tc['username'],
+                                                                                    'password':tc['password'] } )
+
+                self.assertFalse(res.strip())
+
+                # make sure files are identical
+                with open(spath) as sh:
+                    with open(dpath) as dh:
+                        self.assertEquals(sh.read(), dh.read())
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_dir_non_recursive(self):
+        """try to copy a directory without specifying recurse"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # destdir and sourcedir
+        dpath = os.path.join( path, "destdir" ) 
+        spath = os.path.join( path, "sourcedir" )
+        os.makedirs(spath)
+        os.makedirs(dpath)
+        
+        # we need to read this directory to copy it
+        os.chmod(spath,0755)
+
+        # stick a file in in
+        self.createfile(os.path.join(spath,"dummy.dat"))
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                with self.assertRaises(IsADirectory):
+                    res = self.sshfs.cp("localhost",tc['username'],spath, dpath, creds={'user':tc['username'],
+                                                                                        'username':tc['username'],
+                                                                                        'password':tc['password'] } )
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_dir_recursive_with_no_read_permissions(self):
+        """try to copy a directory without read permissione"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # destdir and sourcedir
+        dpath = os.path.join( path, "destdir" ) 
+        spath = os.path.join( path, "sourcedir" )
+        os.makedirs(spath)
+        os.makedirs(dpath)
+        
+        # we need to read this directory to copy it
+        os.chmod(spath,0755)
+
+        # stick a file in in
+        self.createfile(os.path.join(spath,"dummy.dat"))
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                with self.assertRaises(PermissionDenied):
+                    res = self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
+                                                                                                      'username':tc['username'],
+                                                                                                      'password':tc['password'] } )
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_dir_recursively(self):
+        """try to copy a directory recursively"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # destdir and sourcedir
+        dpath = os.path.join( path, "destdir" ) 
+        spath = os.path.join( path, "sourcedir" )
+        os.makedirs(spath)
+        os.makedirs(dpath)
+
+        # source readable, dest writable
+        os.chmod(spath, 0755)
+        os.chmod(dpath, 0777)
+        
+        # stick a file in it and make it readable
+        fpath = os.path.join(spath,"dummy.dat")
+        self.createfile(fpath)
+        os.chmod(fpath, 0755)
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                #debug("src:%s"%spath)
+                #debug("dst:%s"%dpath)
+
+                res = self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
+                                                                                                  'username':tc['username'],
+                                                                                                  'password':tc['password'] } )
+
+                # sourcedir should appear inside destdir
+                self.assertTrue(os.path.isdir(os.path.join(dpath,'sourcedir')))
+
+                # the file should be inside that
+                self.assertTrue(os.path.isfile(os.path.join(dpath,'sourcedir','dummy.dat')))
+
+                # the file should be identical to the source
+                with open(fpath) as src:
+                    with open(os.path.join(dpath,'sourcedir','dummy.dat')) as dst:
+                        self.assertEquals( src.read(), dst.read() )
+                              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_dir_recursively_to_different_folder_name(self):
+        """try to copy a directory recursively but make the destination another name, not the containing folder"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # destdir and sourcedir
+        dpath = os.path.join( path, "destdir" ) 
+        spath = os.path.join( path, "sourcedir" )
+        os.makedirs(spath)
+        os.makedirs(dpath)
+
+        # source readable, dest writable
+        os.chmod(spath, 0755)
+        os.chmod(dpath, 0777)
+        
+        # stick a file in it and make it readable
+        fpath = os.path.join(spath,"dummy.dat")
+        self.createfile(fpath)
+        os.chmod(fpath, 0755)
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                #debug("src:%s"%spath)
+                #debug("dst:%s"%dpath)
+
+                res = self.sshfs.cp("localhost",tc['username'],spath, dpath+"/newname", recurse=True, creds={'user':tc['username'],
+                                                                                                  'username':tc['username'],
+                                                                                                  'password':tc['password'] } )
+
+                # newname should appear inside destdir
+                self.assertTrue(os.path.isdir(os.path.join(dpath,'newname')))
+
+                # the file should be inside that
+                self.assertTrue(os.path.isfile(os.path.join(dpath,'newname','dummy.dat')))
+
+                # the file should be identical to the source
+                with open(fpath) as src:
+                    with open(os.path.join(dpath,'newname','dummy.dat')) as dst:
+                        self.assertEquals( src.read(), dst.read() )
+                              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_non_existant_dir_recursively(self):
+        """try to copy a directory recursively"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # destdir and sourcedir
+        dpath = os.path.join( path, "destdir" ) 
+        spath = os.path.join( path, "sourcedir" )
+        os.makedirs(dpath)
+
+        # dest writable
+        os.chmod(dpath, 0777)
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                #debug("src:%s"%spath)
+                #debug("dst:%s"%dpath)
+
+                res = self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
+                                                                                                  'username':tc['username'],
+                                                                                                  'password':tc['password'] } )
+
+                # sourcedir should appear inside destdir
+                self.assertTrue(os.path.isdir(os.path.join(dpath,'sourcedir')))
+
+                # the file should be inside that
+                self.assertTrue(os.path.isfile(os.path.join(dpath,'sourcedir','dummy.dat')))
+
+                # the file should be identical to the source
+                with open(fpath) as src:
+                    with open(os.path.join(dpath,'sourcedir','dummy.dat')) as dst:
+                        self.assertEquals( src.read(), dst.read() )
+                              
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+
+
