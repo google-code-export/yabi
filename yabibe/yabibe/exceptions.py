@@ -17,7 +17,8 @@ class InvalidPath(Exception):
     pass
 
 class IsADirectory(Exception):
-    """pretty much only used where you try to delete a directory and dont use recurse"""
+    """pretty much only used where you try to delete a directory and dont use recurse,
+    or when you try and copy a directory and don't use recurse"""
     pass
 
 class AuthException(BlockingException):

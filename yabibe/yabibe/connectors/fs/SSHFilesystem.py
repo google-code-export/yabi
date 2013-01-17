@@ -203,25 +203,16 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
         return ls_data
         
-    @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
+    #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def ln(self, host, username, target, link, port=22, yabiusername=None, creds={},priority=0):
         # acquire our queue lock
-        if priority:
-            lock = self.lockqueue.lock()
+        #if priority:
+        #    lock = self.lockqueue.lock()
         
         creds = self.Creds(yabiusername, creds, self.URI(username, host, port, link) )
-        usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
-        
-        # we need to munge the path for transport over ssh (cause it sucks)
-        #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = self.shell.ln(usercert,host,target, link, port=port, username=creds['username'], password=creds['password'])
-        
-        while not pp.isDone():
-            gevent.sleep()
-            
-        if priority:
-            self.lockqueue.unlock(lock)
+
+        pp = self.execute_and_wait( creds, self.shell.ln, host, target, link, port=port )
             
         err, out = pp.err, pp.out
         
@@ -244,31 +235,13 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             print "ln_data=",out
             print "ln_err", err
         
-        if usercert:
-            os.unlink(usercert)
-        
         return out
         
-    @retry(5,(InvalidPath,PermissionDenied, SSHHardError))
+    #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
     #@call_count
     def cp(self, host, username, src, dst, port=22, yabiusername=None, recurse=False, creds={},priority=0):
-        # acquire our queue lock
-        if priority:
-            lock = self.lockqueue.lock()
-        
         creds = self.Creds(yabiusername, creds, dst)
-        usercert = self.save_identity(creds['key'])                         #, tag=(yabiusername,username,host,path)
-        
-        # we need to munge the path for transport over ssh (cause it sucks)
-        #mungedpath = '"' + path.replace('"',r'\"') + '"'
-        pp = self.shell.cp(usercert,host,src, dst, args="-r" if recurse else None, port=port, username=creds['username'], password=creds['password'])
-        
-        while not pp.isDone():
-            gevent.sleep()
-            
-        if priority:
-            self.lockqueue.unlock(lock)
-            
+        pp = self.execute_and_wait( creds, self.shell.cp, host, src, dst, args="-r" if recurse else None, port=port )
         err, out = pp.err, pp.out
         
         if pp.exitcode!=0:
@@ -277,7 +250,10 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 raise PermissionDenied(err)
             elif "No such file or directory" in err:
                 if not ("cp: cannot stat" in str(err) and "*': No such file or directory" in str(err) and recurse==True):
-                    raise InvalidPath("No such file or directory\n")
+                    raise InvalidPath("No such file or directory")
+            elif "omitting directory" in err:
+                # we are trying to non-recursively copy a directory
+                raise IsADirectory("Non recursive copy attempted on directory")
             else:
                 # hard or soft error?
                 error_type = sshretry.test(pp.exitcode, pp.err)
@@ -291,12 +267,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             print "cp_data=",out
             print "cp_err", err
 
-        if usercert:
-            os.unlink(usercert)
-
         return out
-        
-    
         
     #@lock
     def GetWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
