@@ -999,31 +999,102 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 tc = TestConfig()
 
                 # make sure file is present
-                self.assertTrue(os.path.exists(spath))
+                self.assertFalse(os.path.exists(spath))
 
-                #debug("src:%s"%spath)
-                #debug("dst:%s"%dpath)
+                with self.assertRaises(InvalidPath):
+                    self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
+                                                                                                'username':tc['username'],
+                                                                                                'password':tc['password'] } )
 
-                res = self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
-                                                                                                  'username':tc['username'],
-                                                                                                  'password':tc['password'] } )
-
-                # sourcedir should appear inside destdir
-                self.assertTrue(os.path.isdir(os.path.join(dpath,'sourcedir')))
-
-                # the file should be inside that
-                self.assertTrue(os.path.isfile(os.path.join(dpath,'sourcedir','dummy.dat')))
-
-                # the file should be identical to the source
-                with open(fpath) as src:
-                    with open(os.path.join(dpath,'sourcedir','dummy.dat')) as dst:
-                        self.assertEquals( src.read(), dst.read() )
-                              
             finally:
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
         self.reactor_run()
 
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_cp_existing_file_recursively(self):
+        """copy a file but but do it recursively"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
 
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
 
+        # dest and source
+        dpath = os.path.join( path, "dest.dat" ) 
+        spath = os.path.join( path, "source.dat" )
+        self.createfile(spath,kb=128)
+
+        # we need to read this file to copy it
+        os.chmod(spath,0755)
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                res = self.sshfs.cp("localhost",tc['username'],spath, dpath, recurse=True, creds={'user':tc['username'],
+                                                                                                  'username':tc['username'],
+                                                                                                  'password':tc['password'] } )
+
+                self.assertFalse(res.strip())
+
+                # make sure files are identical
+                with open(spath) as sh:
+                    with open(dpath) as dh:
+                        self.assertEquals(sh.read(), dh.read())
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_read_fifo(self):
+        """read a files contents via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we have no rights to write a symlink into this directory
+        os.chmod(path, 0755)
+
+        # source we want to read
+        spath = os.path.join( path, "source.dat" ) 
+        self.createfile(spath)
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                pp, fifo = self.sshfs.GetReadFifo("localhost",tc['username'],path, filename="source.dat", creds={'user':tc['username'],
+                                                                                                                 'username':tc['username'],
+                                                                                                                 'password':tc['password'] } )
+
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                # lets read from the fifo and check with our file
+                with open(spath) as fileh:
+                    with open(fifo) as fifoh:
+                        self.assertEquals(fileh.read(), fifoh.read())
+
+                # lets make sure after these are closed that our exit code is 0
+                self.assertEquals( pp.exit_code, 0 )
+                debug(res)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run()

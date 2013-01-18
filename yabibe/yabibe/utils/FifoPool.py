@@ -38,7 +38,7 @@ class FifoPool(object):
     
     def get(self):
         """return a new fifo path"""
-        fifo = self._make_fifo()
+        fifo = self.make_fifo()
         self._fifos[fifo]=[]
         return fifo
         

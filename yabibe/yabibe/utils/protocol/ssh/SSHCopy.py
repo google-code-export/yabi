@@ -26,7 +26,7 @@ class SSHCopy(BaseShell):
         port = port or 22
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
             
         remoteuserhost,remotepath = remoteurl.split(':',1)
         remoteuser, remotehost = remoteuserhost.split('@',1)
@@ -62,7 +62,7 @@ class SSHCopy(BaseShell):
         port = port or 22
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
             
             
         remoteuserhost,remotepath = remoteurl.split(':',1)
@@ -99,7 +99,7 @@ class SSHCopy(BaseShell):
         port = port or 22
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
             
         remoteuserhost,remotepath = remoteurl.split(':',1)
         remoteuser, remotehost = remoteuserhost.split('@',1)
@@ -139,7 +139,7 @@ class SSHCopy(BaseShell):
         port = port or 22
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
                         
         remoteuserhost,remotepath = remoteurl.split(':',1)
         remoteuser, remotehost = remoteuserhost.split('@',1)
