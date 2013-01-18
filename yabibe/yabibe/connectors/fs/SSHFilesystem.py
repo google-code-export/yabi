@@ -302,8 +302,14 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             print "SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        usercert = self.save_identity(creds['key'])
-        return ssh.Copy.ReadFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
+        if 'key' in creds and creds['key']:
+            # key based login
+            with TempFile(creds['key']) as tf:
+                return ssh.Copy.ReadFromRemote(tf,dst,port=port,password=creds['password'],fifo=fifo)
+        else:
+            # password based login
+            return ssh.Copy.ReadFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
+            
         
     def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
