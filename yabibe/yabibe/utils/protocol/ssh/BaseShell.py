@@ -2,7 +2,12 @@ import os
 from twisted.internet import protocol
 from twisted.internet import reactor
     
-DEBUG = False
+DEBUG = True
+
+import sys
+def debug(*args, **kwargs):
+    if DEBUG:
+        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
     
 class BaseShellProcessProtocol(protocol.ProcessProtocol):
     def __init__(self, stdin=None):
@@ -10,43 +15,50 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
         self.err = ""
         self.out = ""
         self.exitcode = None
+        debug("init")
         
     def connectionMade(self):
         # when the process finally spawns, close stdin, to indicate we have nothing to say to it
+        debug("connectionMade")
         if self.stdin:
             self.transport.write(self.stdin)
         self.transport.closeStdin()
+
+    def childDataReceived(self, data):
+        debug("child:",data)
         
     def outReceived(self, data):
         self.out += data
-        if DEBUG:
-            print "OUT:",data
+        debug("OUT:",data)
         
     def errReceived(self, data):
         self.err += data
-        if DEBUG:
-            print "ERR:",data
+        debug("ERR:",data)
+
+    def childConnectionLost(self):
+        debug("child lost")
     
     def outConnectionLost(self):
         # stdout was closed. this will be our endpoint reference
-        if DEBUG:
-            print "Out lost"
+        debug("Out lost")
         self.unifyLineEndings()
         
     def inConenctionLost(self):
-        if DEBUG:
-            print "In lost"
+        debug("In lost")
         self.unifyLineEndings()
         
     def errConnectionLost(self):
-        if DEBUG:
-            print "Err lost"
+        debug("Err lost")
         self.unifyLineEndings()
         
     def processEnded(self, status_object):
         self.exitcode = status_object.value.exitCode
-        if DEBUG:
-            print "proc ended",self.exitcode
+        debug("proc ended",self.exitcode)
+        self.unifyLineEndings()
+
+    def processExited(self, reason):
+        debug("proc exit",reason)
+        self.exitcode = status_object.value.exitCode
         self.unifyLineEndings()
         
     def unifyLineEndings(self):
@@ -76,19 +88,11 @@ class BaseShell(object):
         """execute a command using a process protocol"""
 
         subenv = env or self._make_env()
-        if DEBUG:
-            #print "env",subenv
-            print "exec:",command
-            #print  [pp,
-            #                    command[0],
-            #                    command,
-            #                    subenv,
-            #                    self._make_path()]
-            
+        debug("exec:",command,pp)
         reactor.spawnProcess(   pp,
                                 command[0],
                                 command,
                                 env=subenv,
-                                path=self._make_path()
+                                path=self._make_path(),
                             )
         return pp
