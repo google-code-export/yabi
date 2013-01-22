@@ -6,7 +6,12 @@ from BaseShell import BaseShell, BaseShellProcessProtocol
 from yabibe.conf import config
 
 
-DEBUG = False
+DEBUG = True
+
+import sys
+def debug(*args, **kwargs):
+    if DEBUG:
+        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
 class SSHExecProcessProtocolParamiko(BaseShellProcessProtocol):
     def __init__(self, stdin_data=None):
@@ -15,13 +20,19 @@ class SSHExecProcessProtocolParamiko(BaseShellProcessProtocol):
         self.stdin_data = stdin_data
         
     def connectionMade(self):
+        debug("connectionMade")
         if self.stdin_data:
+            debug('write')
             self.transport.write(self.stdin_data)
-        
+
+        debug("closing")        
         self.transport.closeStdin()
         self.started = True
+
+        debug("started")
                 
     def isStarted(self):
+        debug("isStarted")
         return self.started
         
 class SSHError(Exception):

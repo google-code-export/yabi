@@ -21,7 +21,7 @@ from twisted.internet import reactor
 
 def debug(*args, **kwargs):
     import sys
-    sys.stderr.write("debug(%s)"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
 def make_conf(conf):
     output = []
@@ -104,6 +104,8 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
     def run_reactor(self):
         self._run = True
+        #reactor.installWaker()
+        #reactor._handleSignals()
         try:
             reactor.startRunning()
         except Exception:
@@ -570,11 +572,11 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         thread = gevent.spawn(threadlet)
         self.reactor_run()
 
-    def createfile(self,filename, kb=1):
+    def createfile(self,filename, blocks=1, bs=1024):
         with open(filename, 'wb') as fh:
-            for i in range(kb):
+            for i in range(blocks):
                 fh.write("".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
-                                      for X in range(1024) ] ))
+                                      for X in range(bs) ] ))
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ln_creation_in_restricted_directory(self):
@@ -1066,7 +1068,8 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
         # source we want to read
         spath = os.path.join( path, "source.dat" ) 
-        self.createfile(spath)
+        self.createfile(spath, bs=9652)
+        os.chmod(spath, 0755)
 
         def threadlet():
             try:
@@ -1080,17 +1083,34 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 pp, fifo = self.sshfs.GetReadFifo("localhost",tc['username'],path, filename="source.dat", creds={'user':tc['username'],
                                                                                                                  'username':tc['username'],
                                                                                                                  'password':tc['password'] } )
-
+                debug("started",pp,fifo)
                 self.assertTrue(pp)
                 self.assertTrue(fifo)
 
                 # lets read from the fifo and check with our file
                 with open(spath) as fileh:
+                    #debug(fileh)
                     with open(fifo) as fifoh:
-                        self.assertEquals(fileh.read(), fifoh.read())
+                    #with os.fdopen(os.open(fifo, os.O_RDONLY|os.O_NONBLOCK)) as fifoh:
+                        #import fcntl, errno
+                        #fcntl.fcntl(fifoh.fileno(), fcntl.F_SETFL, os.O_NONBLOCK) 
+
+                        indat = fileh.read()
+                        outdat = fifoh.read()
+                        debug("comparing %d bytes"%len(indat))
+                        self.assertEquals(indat,outdat)
+
+                # wait for task to finish
+                while not pp.isDone():
+                    from twisted.internet import process
+                    process.reapAllProcesses()
+                    time.sleep(1)
+                    import signal
+                    debug(signal.getsignal(signal.SIGCHLD))
+                    debug(pp.isDone())
 
                 # lets make sure after these are closed that our exit code is 0
-                self.assertEquals( pp.exit_code, 0 )
+                self.assertEquals( pp.exitcode, 0 )
                 debug(res)
                 
             finally:

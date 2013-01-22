@@ -305,9 +305,10 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         if 'key' in creds and creds['key']:
             # key based login
             with TempFile(creds['key']) as tf:
-                return ssh.Copy.ReadFromRemote(tf,dst,port=port,password=creds['password'],fifo=fifo)
+                return ssh.Copy.ReadFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
+            sys.stderr.write("\nPASSWORD:%s\n%s\n"%(creds['password'],dst))
             return ssh.Copy.ReadFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
             
         
