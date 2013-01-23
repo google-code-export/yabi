@@ -104,24 +104,24 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
     def run_reactor(self):
         self._run = True
-        #reactor.installWaker()
-        #reactor._handleSignals()
         try:
             reactor.startRunning()
         except Exception:
             pass
         while self._run:
-            #sys.stderr.write("+")
             if reactor.doInner():
-                #sys.stderr.write("break!")
                 break
         self._run = False
 
     def reactor_stop(self):
         self._run = False
 
-    def reactor_run(self):
+    def reactor_run(self, gthread=None):
         self.run_reactor()
+
+        #if gthread is passed in, check for exception and raise it if there is one
+        if gthread is not None and gthread.exception:
+            raise gthread.exception
 
 
     USER_CERT =  {'user':os.environ.get("TESTUSER","dummyuser"),
@@ -153,7 +153,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_mkdir_permission_denied(self):
@@ -178,7 +178,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_mkdir_creates_all_parents(self):
@@ -206,7 +206,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_file_with_no_recurse(self):
@@ -243,7 +243,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_path_with_no_recurse(self):
@@ -274,7 +274,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_path_with_recurse(self):
@@ -307,7 +307,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_file_without_permissions(self):
@@ -357,7 +357,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
     
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_rm_nonexisting_path(self):
@@ -386,7 +386,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ls_non_existing_path(self):
@@ -414,7 +414,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ls_existing_path(self):
@@ -460,7 +460,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
@@ -516,7 +516,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     
     
@@ -570,13 +570,16 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     def createfile(self,filename, blocks=1, bs=1024):
         with open(filename, 'wb') as fh:
             for i in range(blocks):
-                fh.write("".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
-                                      for X in range(bs) ] ))
+                fh.write(self.createdata(bs))
+
+    def createdata(self,count):
+        return "".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                      for X in range(count) ] )
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ln_creation_in_restricted_directory(self):
@@ -611,7 +614,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ln_creation(self):
@@ -654,7 +657,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_ln_creation_to_non_existing_path(self):
@@ -702,7 +705,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_non_existing_path(self):
@@ -736,7 +739,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
@@ -751,7 +754,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         # dest and source
         dpath = os.path.join( path, "dest.dat" ) 
         spath = os.path.join( path, "source.dat" )
-        self.createfile(spath,kb=128)
+        self.createfile(spath,blocks=128)
 
         # we need to read this file to copy it
         os.chmod(spath,0755)
@@ -780,7 +783,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
@@ -821,7 +824,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_dir_recursive_with_no_read_permissions(self):
@@ -861,7 +864,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_dir_recursively(self):
@@ -918,7 +921,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_dir_recursively_to_different_folder_name(self):
@@ -975,7 +978,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_non_existant_dir_recursively(self):
@@ -1012,7 +1015,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_cp_existing_file_recursively(self):
@@ -1026,7 +1029,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         # dest and source
         dpath = os.path.join( path, "dest.dat" ) 
         spath = os.path.join( path, "source.dat" )
-        self.createfile(spath,kb=128)
+        self.createfile(spath,blocks=128)
 
         # we need to read this file to copy it
         os.chmod(spath,0755)
@@ -1055,7 +1058,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_get_read_fifo(self):
@@ -1083,38 +1086,167 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 pp, fifo = self.sshfs.GetReadFifo("localhost",tc['username'],path, filename="source.dat", creds={'user':tc['username'],
                                                                                                                  'username':tc['username'],
                                                                                                                  'password':tc['password'] } )
-                debug("started",pp,fifo)
                 self.assertTrue(pp)
                 self.assertTrue(fifo)
 
                 # lets read from the fifo and check with our file
                 with open(spath) as fileh:
-                    #debug(fileh)
                     with open(fifo) as fifoh:
-                    #with os.fdopen(os.open(fifo, os.O_RDONLY|os.O_NONBLOCK)) as fifoh:
-                        #import fcntl, errno
-                        #fcntl.fcntl(fifoh.fileno(), fcntl.F_SETFL, os.O_NONBLOCK) 
-
-                        indat = fileh.read()
-                        outdat = fifoh.read()
-                        debug("comparing %d bytes"%len(indat))
-                        self.assertEquals(indat,outdat)
+                        self.assertEquals(fileh.read(),fifoh.read())
 
                 # wait for task to finish
                 while not pp.isDone():
-                    from twisted.internet import process
-                    process.reapAllProcesses()
-                    time.sleep(1)
-                    import signal
-                    debug(signal.getsignal(signal.SIGCHLD))
-                    debug(pp.isDone())
+                    gevent.sleep()
 
                 # lets make sure after these are closed that our exit code is 0
                 self.assertEquals( pp.exitcode, 0 )
-                debug(res)
                 
             finally:
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
-        self.reactor_run()
+        self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_read_fifo_for_file_where_we_dont_have_permission(self):
+        """read an unreadable file's contents via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we have no rights to write a symlink into this directory
+        os.chmod(path, 0755)
+
+        # source we want to read
+        spath = os.path.join( path, "source.dat" ) 
+        self.createfile(spath, bs=9652)
+
+        # ro reading for user
+        os.chmod(spath, 0700)
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertTrue(os.path.exists(spath))
+
+                pp, fifo = self.sshfs.GetReadFifo("localhost",tc['username'],path, filename="source.dat", creds={'user':tc['username'],
+                                                                                                                 'username':tc['username'],
+                                                                                                                 'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                # lets make sure after these are closed that our exit code is not 0
+                self.assertNotEquals( pp.exitcode, 0 )
+
+                # stdout should be empty
+                self.assertFalse(pp.out)
+
+                # make sure we get permission denied
+                self.assertTrue("IOError: [Errno 13] Permission denied" in pp.err)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_read_fifo_for_nonexisting_file(self):
+        """try to read a nonexisting file via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we have no rights to write a symlink into this directory
+        os.chmod(path, 0755)
+
+        # non existing source we want to read
+        spath = os.path.join( path, "source.dat" ) 
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                # make sure file is present
+                self.assertFalse(os.path.exists(spath))
+
+                pp, fifo = self.sshfs.GetReadFifo("localhost",tc['username'],path, filename="source.dat", creds={'user':tc['username'],
+                                                                                                                 'username':tc['username'],
+                                                                                                                 'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                # lets make sure after these are closed that our exit code is not 0
+                self.assertNotEquals( pp.exitcode, 0 )
+
+                # stdout should be empty
+                self.assertFalse(pp.out)
+
+                # make sure we get file not found
+                self.assertTrue("IOError: [Errno 2] No such file" in pp.err)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+        
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_write_fifo(self):
+        """writes to a file via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we must have rights to write
+        os.chmod(path, 0777)
+
+        # dest we want to write
+        dpath = os.path.join( path, "dest.dat" ) 
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                pp, fifo = self.sshfs.GetWriteFifo("localhost",tc['username'],path, filename="dest.dat", creds={'user':tc['username'],
+                                                                                                                'username':tc['username'],
+                                                                                                                'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                data = self.createdata(random.randint(5000,15000))
+                debug(len(data))
+
+                # lets write our data to our fifo
+                with open(fifo,'w') as fifoh:
+                    fifoh.write(data)
+                    
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                # lets make sure after these are closed that our exit code is 0
+                self.assertEquals( pp.exitcode, 0 )
+
+                # make sure the data has been written correctly
+                with open(dpath) as fh:
+                    self.assertEquals(fh.read(), data)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)

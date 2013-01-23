@@ -6,7 +6,7 @@ from BaseShell import BaseShell, BaseShellProcessProtocol
 from yabibe.conf import config
 
 
-DEBUG = True
+DEBUG = False
 
 import sys
 def debug(*args, **kwargs):

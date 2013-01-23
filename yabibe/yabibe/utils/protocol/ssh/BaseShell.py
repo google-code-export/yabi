@@ -2,7 +2,7 @@ import os
 from twisted.internet import protocol
 from twisted.internet import reactor
     
-DEBUG = True
+DEBUG = False
 
 import sys
 def debug(*args, **kwargs):
@@ -24,9 +24,6 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
             self.transport.write(self.stdin)
         self.transport.closeStdin()
 
-    def childDataReceived(self, data):
-        debug("child:",data)
-        
     def outReceived(self, data):
         self.out += data
         debug("OUT:",data)
@@ -34,9 +31,6 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
     def errReceived(self, data):
         self.err += data
         debug("ERR:",data)
-
-    def childConnectionLost(self):
-        debug("child lost")
     
     def outConnectionLost(self):
         # stdout was closed. this will be our endpoint reference
@@ -58,7 +52,7 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
 
     def processExited(self, reason):
         debug("proc exit",reason)
-        self.exitcode = status_object.value.exitCode
+        self.exitcode = reason.value.exitCode
         self.unifyLineEndings()
         
     def unifyLineEndings(self):

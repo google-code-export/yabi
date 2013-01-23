@@ -284,8 +284,13 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             print "SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        usercert = self.save_identity(creds['key'])
-        return ssh.Copy.WriteToRemote(usercert,dst,port=port,password=str(creds['password']),fifo=fifo)
+        if 'key' in creds and creds['key']:
+            # key based login
+            with TempFile(creds['key']) as tf:
+                return ssh.Copy.WriteToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
+        else:
+            # password based login
+            return ssh.Copy.WriteToRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
         
     #@lock
     def GetReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
@@ -308,7 +313,6 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 return ssh.Copy.ReadFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
-            sys.stderr.write("\nPASSWORD:%s\n%s\n"%(creds['password'],dst))
             return ssh.Copy.ReadFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
             
         
