@@ -315,15 +315,19 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             # password based login
             return ssh.Copy.ReadFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
             
-        
     def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
         if DEBUG:
             print "SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        usercert = self.save_identity(creds['key'])
-        return ssh.Copy.ReadCompressedFromRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
+        if 'key' in creds and creds['key']:
+            # key based login
+            with TempFile(creds['key']) as tf:
+                return ssh.Copy.ReadCompressedFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
+        else:
+            # password based login
+            return ssh.Copy.ReadCompressedFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
         
     def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
@@ -331,9 +335,14 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             print "SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        usercert = self.save_identity(creds['key'])
-        return ssh.Copy.WriteCompressedToRemote(usercert,dst,port=port,password=creds['password'],fifo=fifo)
-        
+        if 'key' in creds and creds['key']:
+            # key based login
+            with TempFile(creds['key']) as tf:
+                return ssh.Copy.WriteCompressedToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
+        else:
+            # password based login
+            return ssh.Copy.WriteCompressedToRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
+
     def Creds(self, yabiusername, creds, uri):
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         return creds or UserCreds( yabiusername, uri, credtype="fs")
