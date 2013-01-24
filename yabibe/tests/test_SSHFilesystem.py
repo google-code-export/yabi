@@ -49,6 +49,8 @@ class write_config(object):
 class SSHFilesystemTestSuite(unittest.TestCase):
     """Test SSHFilesystem"""
     testdir="/tmp/yabi-ssh-filesystem-unit-test"
+    #testdir="/home/cwellington/tmp/yabi-ssh-filesystem-unit-test"
+    
     
     def setUp(self):
         if os.path.exists(self.testdir):
@@ -1228,7 +1230,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 self.assertTrue(fifo)
 
                 data = self.createdata(random.randint(5000,15000))
-                debug(len(data))
+                #debug(len(data))
 
                 # lets write our data to our fifo
                 with open(fifo,'w') as fifoh:
@@ -1244,6 +1246,211 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 # make sure the data has been written correctly
                 with open(dpath) as fh:
                     self.assertEquals(fh.read(), data)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_write_fifo_no_permissions_small_amount_of_data(self):
+        """writes to a file via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # read only for testuser
+        os.chmod(path, 0755)
+
+        # dest we want to write
+        dpath = os.path.join( path, "dest.dat" ) 
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                pp, fifo = self.sshfs.GetWriteFifo("localhost",tc['username'],path, filename="dest.dat", creds={'user':tc['username'],
+                                                                                                                'username':tc['username'],
+                                                                                                                'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                data = self.createdata(random.randint(5000,15000))
+                #debug(len(data))
+
+                # lets write our data to our fifo
+                with open(fifo,'w') as fifoh:
+                    fifoh.write(data)
+                    
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                # lets make sure after these are closed that our exit code is 0
+                self.assertEquals( pp.exitcode, 255 )
+
+                # the file should not exist
+                self.assertFalse(os.path.exists(dpath))
+
+                # we should have permission denied in our response
+                self.assertTrue("IOError: [Errno 13] Permission denied" in pp.err)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_write_fifo_no_permissions_large_amount_of_data(self):
+        """a large amount of data should cause a broken pipe in the write"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # read only for testuser
+        os.chmod(path, 0755)
+
+        # dest we want to write
+        dpath = os.path.join( path, "dest.dat" ) 
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                pp, fifo = self.sshfs.GetWriteFifo("localhost",tc['username'],path, filename="dest.dat", creds={'user':tc['username'],
+                                                                                                                'username':tc['username'],
+                                                                                                                'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                data = self.createdata(8192)
+                #debug(len(data))
+
+                # lets write our data to our fifo. It should break the pipe
+                with self.assertRaises(IOError):
+                    with open(fifo,'w') as fifoh:
+                        for count in range(128):
+                            fifoh.write(data)
+
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                # lets make sure after these are closed that our exit code is 0
+                self.assertEquals( pp.exitcode, 255 )
+
+                # the file should not exist
+                self.assertFalse(os.path.exists(dpath))
+
+                # we should have permission denied in our response
+                self.assertTrue("IOError: [Errno 13] Permission denied" in pp.err)
+                
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
+    def make_tgz_data_stream(self, files):
+        """Makes a tgz data stream for a bunch of files.
+        pass in the files as a dictionary, names as keys, contents as values.
+        Directories are automatically created. eg
+
+        files = { 'test.dat':'line1\nline2\n',
+                  'dir/file.txt':'test' }
+        """
+        createspace = tempfile.mktemp()
+        os.makedirs(createspace)
+        
+        for filename in files:
+            if os.path.sep in filename:
+                # make the directories
+                parts = filename.split(os.path.sep)
+                # ['1','2','3','4'] => ['1','1/2','1/2/3']
+                for dirs in [ os.path.sep.join(parts[:X+1]) for X in range(len(parts)-1) ]:
+                     os.makedirs( os.path.join( createspace,dirs ) )
+
+                # now place the file
+                fullpath = os.path.join( createspace, *parts )
+
+                with open(fullpath, 'w') as fh:
+                    fh.write( files[filename] )
+
+            else:
+                # just a file
+                with open( os.path.join( createspace, filename ), 'w' ) as fh:
+                    fh.write( files[filename] )
+
+        # now lets targz it up
+        dest = "/tmp/yabi-test-suite-tarball.tgz"
+        assert not os.system("tar -C '%s' -cvz -f '%s' ."%(createspace,dest))
+
+        # read the data in
+        with open(dest) as fh:
+            data = fh.read()
+
+        # cleanup files
+        os.unlink(dest)
+        assert not os.system("rm -rf '%s'"%(createspace))
+
+        return data
+        
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_write_compressed_fifo(self):
+        """writes to a compressed file via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we must have rights to write
+        os.chmod(path, 0777)
+
+        debug(path)
+        os.system("ls -alF '%s'"%path)
+
+        # dest we want to write
+        dpath = os.path.join( path, "dest.tar.gz" ) 
+        
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                testfiles = {'file1.txt':self.createdata(10000),
+                             'file2.dat':self.createdata(1024),
+                             'path/to/other/file3.doc':self.createdata(100)
+                             }
+
+                datastream = self.make_tgz_data_stream(testfiles)
+
+                pp, fifo = self.sshfs.GetCompressedWriteFifo("localhost",tc['username'],path, filename="dest.tar.gz", creds={'user':tc['username'],
+                                                                                                                             'username':tc['username'],
+                                                                                                                             'password':tc['password'] } )
+                self.assertTrue(pp)
+                self.assertTrue(fifo)
+
+                # lets write our data to our fifo
+                with open(fifo,'w') as fifoh:
+                    fifoh.write(datastream)
+                    
+                # wait for task to finish
+                while not pp.isDone():
+                    gevent.sleep()
+
+                debug(pp.out)
+                debug('-'*80)
+                debug(pp.err)
+
+                # lets make sure after these are closed that our exit code is 0
+                self.assertEquals( pp.exitcode, 0 )
+
+                # make sure the data has been written correctly
+                #with open(dpath) as fh:
+                #    self.assertEquals(fh.read(), data)
                 
             finally:
                 self.reactor_stop()
