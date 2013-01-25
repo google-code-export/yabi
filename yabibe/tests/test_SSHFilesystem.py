@@ -11,8 +11,10 @@ import sys
 import random
 import gevent
 import time
+import pwd
 
 from config import TestConfig
+from FileSet import FileSet, TempFile
                 
 from yabibe.connectors.fs import SSHFilesystem
 from yabibe.exceptions import CredentialNotFound, IsADirectory, PermissionDenied, InvalidPath
@@ -1363,41 +1365,29 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         files = { 'test.dat':'line1\nline2\n',
                   'dir/file.txt':'test' }
         """
-        createspace = tempfile.mktemp()
-        os.makedirs(createspace)
-        
-        for filename in files:
-            if os.path.sep in filename:
-                # make the directories
-                parts = filename.split(os.path.sep)
-                # ['1','2','3','4'] => ['1','1/2','1/2/3']
-                for dirs in [ os.path.sep.join(parts[:X+1]) for X in range(len(parts)-1) ]:
-                     os.makedirs( os.path.join( createspace,dirs ) )
+        with FileSet(files) as fs:
+            # now lets targz it up
+            dest = "/tmp/yabi-test-suite-tarball.tgz"
+            assert not os.system("tar -C '%s' -cz -f '%s' ."%(fs.path,dest))
 
-                # now place the file
-                fullpath = os.path.join( createspace, *parts )
+            # read the data in
+            with open(dest) as fh:
+                data = fh.read()
 
-                with open(fullpath, 'w') as fh:
-                    fh.write( files[filename] )
+            # cleanup files
+            os.unlink(dest)
+            return data
 
-            else:
-                # just a file
-                with open( os.path.join( createspace, filename ), 'w' ) as fh:
-                    fh.write( files[filename] )
-
-        # now lets targz it up
-        dest = "/tmp/yabi-test-suite-tarball.tgz"
-        assert not os.system("tar -C '%s' -cvz -f '%s' ."%(createspace,dest))
-
-        # read the data in
-        with open(dest) as fh:
-            data = fh.read()
-
-        # cleanup files
-        os.unlink(dest)
-        assert not os.system("rm -rf '%s'"%(createspace))
-
-        return data
+    def compare_dir_to_fileset(self, directory, fileset):
+        """compares a directroy to that described in fileset.
+        If they are exactly the same, returns True
+        else returns False
+        """
+        from filecmp import dircmp
+        with FileSet(fileset) as fs:
+            comp = dircmp( fs.path, directory, ignore=[] )
+            return not comp.left_only and not comp.right_only and not comp.diff_files 
+            
         
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
     def test_get_write_compressed_fifo(self):
@@ -1408,8 +1398,8 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         # we must have rights to write
         os.chmod(path, 0777)
 
-        debug(path)
-        os.system("ls -alF '%s'"%path)
+        # and chmod (so we need to own it)
+        assert not os.system("sudo chown %s '%s'"%(TestConfig()['username'],path))
 
         # dest we want to write
         dpath = os.path.join( path, "dest.tar.gz" ) 
@@ -1427,7 +1417,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
                 datastream = self.make_tgz_data_stream(testfiles)
 
-                pp, fifo = self.sshfs.GetCompressedWriteFifo("localhost",tc['username'],path, filename="dest.tar.gz", creds={'user':tc['username'],
+                pp, fifo = self.sshfs.GetCompressedWriteFifo("localhost",tc['username'],path, filename="TODO: remove this uneeded parameter", creds={'user':tc['username'],
                                                                                                                              'username':tc['username'],
                                                                                                                              'password':tc['password'] } )
                 self.assertTrue(pp)
@@ -1441,19 +1431,84 @@ class SSHFilesystemTestSuite(unittest.TestCase):
                 while not pp.isDone():
                     gevent.sleep()
 
-                debug(pp.out)
-                debug('-'*80)
-                debug(pp.err)
-
                 # lets make sure after these are closed that our exit code is 0
                 self.assertEquals( pp.exitcode, 0 )
 
-                # make sure the data has been written correctly
-                #with open(dpath) as fh:
-                #    self.assertEquals(fh.read(), data)
+                # compare the destination area with our source filestructure
+                for filepath,data in testfiles.iteritems():
+                    with open(os.path.join(path,filepath)) as fh:
+                        self.assertEquals( fh.read(), data )
                 
             finally:
                 self.reactor_stop()
                 
         thread = gevent.spawn(threadlet)
         self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
+    def test_get_read_compressed_fifo(self):
+        """writes to a compressed file via a fifo"""
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # we must have rights to write
+        os.chmod(path, 0777)
+
+        # and chmod (so we need to own it)
+        assert not os.system("sudo chown %s '%s'"%(TestConfig()['username'],path))
+
+        def threadlet():
+            try:
+                # making the sshfs connector do this means we dont need an admin with a hostkeys table set etc.
+                self.sshfs.set_check_knownhosts(True)
+                tc = TestConfig()
+
+                testfiles = {'file1.txt':self.createdata(10000),
+                             'file2.dat':self.createdata(1024),
+                             'path/to/other/file3.doc':self.createdata(100)
+                             }
+
+                with FileSet(testfiles) as fs:
+                    # TODO: remove filename from call semantics
+                    pp, fifo = self.sshfs.GetCompressedReadFifo("localhost",tc['username'],fs.path, filename="", creds={'user':tc['username'],
+                                                                                                                        'username':tc['username'],
+                                                                                                                        'password':tc['password'] } )
+
+                    self.assertTrue(pp)
+                    self.assertTrue(fifo)
+
+                    with open(fifo) as fh:
+                        data = fh.read()
+      
+                    # wait for task to finish
+                    while not pp.isDone():
+                        gevent.sleep()
+
+                    # lets make sure after these are closed that our exit code is 0
+                    self.assertEquals( pp.exitcode, 0 )
+
+                    # now lets try and untar our data stream and compare
+                    temp = tempfile.mktemp()
+                    os.makedirs(temp)
+                    tarfile = os.path.join(temp,"return.tgz")
+                    with open(tarfile,'w') as fh:
+                        fh.write(data)
+
+                    unpack = tempfile.mktemp()
+                    os.makedirs(unpack)
+
+                    try:
+                        assert not os.system("tar -C '%s' -xz -f '%s'"%(unpack,tarfile))
+                        self.assertTrue( self.compare_dir_to_fileset(unpack,testfiles) )
+
+                    finally:
+                        assert not os.system("rm -rf '%s'"%(unpack))
+                        assert not os.system("rm -rf '%s'"%(temp))
+                        
+            finally:
+                self.reactor_stop()
+                
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
+    

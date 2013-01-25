@@ -53,8 +53,7 @@ class SSHRun(BaseShell):
         if modules:
             remote_command = "&&".join(["module load %s"%module for module in modules]+[remote_command])
         
-        if DEBUG:
-            print "running remote command:",remote_command
+        debug("running remote command:",remote_command)
         
         command = [self.python, self.ssh_exec ]
         command += ["-i",certfile] if certfile else []
@@ -63,8 +62,7 @@ class SSHRun(BaseShell):
         command += ["-H",host] if host else []
         command.extend( [ "-x", remote_command ] )
         
-        if DEBUG:      
-            print "COMMAND:",command
+        debug("COMMAND:",command)
             
         # hande log setting
         if config.config['execution']['logcommand']:

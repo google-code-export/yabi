@@ -27,6 +27,10 @@ SCHEMA = "scp"
 
 DEBUG = False
 
+def debug(*args, **kwargs):
+    if DEBUG:
+        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+
 MAX_SSH_CONNECTIONS = 15                                     # zero is unlimited
     
 
@@ -334,6 +338,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         if DEBUG:
             print "SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
+        debug(dst)
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
             # key based login
