@@ -101,7 +101,7 @@ class LocalRun(LocalExecutionShell):
         """
         
         # write submission script into tempfile
-        from conf import config
+        from yabibe.conf import config
         
         temp_fd, temp_fname = config.mktemp(".sh")
         with open(temp_fname, 'w') as fh:
@@ -126,7 +126,7 @@ class StreamLogger(object):
         self.callback(string)
 
 class LocalConnector(ExecConnector):
-    delay = 1.0
+    delay = 0.1
     
     #"command":command,
                     #"working":working,

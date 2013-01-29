@@ -21,12 +21,12 @@ DEBUG = False
 
 sshauth = ssh.SSHAuth.SSHAuth()
 
-class SSHConnector(ExecConnector, ssh.KeyStore.KeyStore):
-    def __init__(self):
-        ExecConnector.__init__(self)
+class SSHConnector(ExecConnector):    #, ssh.KeyStore.KeyStore):
+    ## def __init__(self):
+    ##     ExecConnector.__init__(self)
         
-        configdir = config.config['backend']['certificates']
-        ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
+    ##     configdir = config.config['backend']['certificates']
+    ##     ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
     
     def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
         # preprocess some stuff
