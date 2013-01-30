@@ -1,5 +1,8 @@
 from yabibe.reactor import GeventReactor
-GeventReactor.install()
+try:
+    GeventReactor.install()
+except ReactorAlreadyInstalledError:
+    pass
 
 import unittest2 as unittest
 from mock import MagicMock, patch
@@ -131,23 +134,88 @@ class LocalExecutionTestSuite(unittest.TestCase):
                          'password':tc['password'] }
 
                 jobid = MagicMock()
+                state = MagicMock()
+                log = MagicMock()
                 
                 res = self.localex.run( tc['username'],
                                       working='/tmp',
                                       submission='${command}\n',
                                       submission_data={'command':'hostname'},
-                                      state=lambda x: debug('state',x),
+                                      state=state,
                                       jobid=jobid,
-                                      info=lambda x: debug('info', x),
-                                      log=lambda x: debug('log', x) )
+                                      info=lambda x: None,
+                                      log=log )
 
-                debug("result",res)
+                # job id should be called once, with a PID
+                self.assertEquals(jobid.call_count, 1)
+                pid = int(jobid.call_args[0][0])
+                self.assertTrue(pid>0 and pid<66000)
 
-                debug(dir(jobid))
-                debug(jobid.call_count)
+                # make sure all the updates were called in order
+                expected_order = [ 'unsubmitted', 'pending', 'running', 'done' ]
+                for call,expected in zip(state.call_args_list, expected_order):
+                    self.assertEquals( call[0][0].lower(), expected )
+
+                # check log messages appeared somewhere
+                from socket import gethostname
+                expected_somewhere = [ 'rendered submission script is:\nhostname\n',
+                                       'sub out:%s\n'%gethostname() ]
+                for call in log.call_args_list:
+                    expected_somewhere.remove(call[0][0])
+                self.assertFalse( expected_somewhere )
 
             finally:
                 self.reactor_stop()
 
         thread = gevent.spawn(threadlet)
         self.reactor_run(thread)
+
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False, 'temp':testdir}} )
+    def test_run_slower_running(self):
+        def threadlet():
+            try:
+                # issue a run
+                tc = TestConfig()
+
+                creds = {'user':tc['username'],
+                         'username':tc['username'],
+                         'password':tc['password'] }
+
+                jobid = MagicMock()
+                state = MagicMock()
+                log = MagicMock()
+                
+                res = self.localex.run( tc['username'],
+                                      working='/tmp',
+                                      submission='${command} 1>${stdout} 2>${stderr}\n',
+                                      submission_data={'command':'hostname',
+                                                       'stdout':'/tmp/yabi-test-stdout.txt',
+                                                       'stderr':'/tmp/yabi-test-stderr.txt'},
+                                      state=state,
+                                      jobid=jobid,
+                                      info=lambda x: None,
+                                      log=log )
+
+                # job id should be called once, with a PID
+                self.assertEquals(jobid.call_count, 1)
+                pid = int(jobid.call_args[0][0])
+                self.assertTrue(pid>0 and pid<66000)
+
+                # make sure all the updates were called in order
+                expected_order = [ 'unsubmitted', 'pending', 'running', 'done' ]
+                for call,expected in zip(state.call_args_list, expected_order):
+                    self.assertEquals( call[0][0].lower(), expected )
+
+                # check log messages appeared somewhere
+                from socket import gethostname
+                expected_somewhere = [ 'rendered submission script is:\nhostname 1>/tmp/yabi-test-stdout.txt 2>/tmp/yabi-test-stderr.txt\n']
+                for call in log.call_args_list:
+                    expected_somewhere.remove(call[0][0])
+                self.assertFalse( expected_somewhere )
+
+            finally:
+                self.reactor_stop()
+
+        thread = gevent.spawn(threadlet)
+        self.reactor_run(thread)
+
