@@ -169,12 +169,13 @@ class LocalConnector(ExecConnector):
             
             localrun = LocalRun()
             subprocess, pp = localrun.run(working, sub, submission_stdout=outstream, submission_stderr=errstream)
-            state("Running")
-            gevent.sleep(self.delay)
-        
+            
             # wait for task to start then store its process id
             while not pp.isStarted():
                 gevent.sleep(self.delay)
+
+            state("Running")
+            gevent.sleep(self.delay)
                 
             # get pid and log it
             jobid(str(pp.pid))

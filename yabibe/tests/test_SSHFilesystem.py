@@ -1,5 +1,9 @@
 from yabibe.reactor import GeventReactor
-GeventReactor.install()
+from twisted.internet.error import ReactorAlreadyInstalledError
+try:
+    GeventReactor.install()
+except ReactorAlreadyInstalledError:
+    pass
 
 import unittest2 as unittest
 from mock import MagicMock, patch
