@@ -40,6 +40,10 @@ _NO_FILEDESC = error.ConnectionFdescWentAway('Filedescriptor went away')
 
 """These (except for waitFor*) resemble the threading helpers from twisted.internet.threads"""
 
+def debug(*args, **kwargs):
+    import sys
+    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+
 def deferToGreenletPool(*args,**kwargs):
     """Call function using a greenlet from the given pool and return the result as a Deferred"""
     reactor = args[0]
@@ -324,22 +328,29 @@ class GeventReactor(posixbase.PosixReactorBase):
             return
         now = self.seconds()
         while 1:
-            #sys.stderr.write(",")
+            #debug("loop",self._callqueue)
             try:
                 c = self._callqueue[0]
             except IndexError:
+                #debug(IndexError)
                 break
             if c.time <= now:
+                #debug("inside")
                 del self._callqueue[0]
                 try:
+                    #debug("call",c)
                     c()
+                    #debug("called")
                 except GreenletExit:
+                    #debug("GreenletExit")
                     raise
                 except:
+                    #debug('Unexpected error in main loop.')
                     log.msg('Unexpected error in main loop.')
                     log.err()
             else:
-                return True
+                #debug(c.time, now)
+                break
  
     def addReader(self,selectable):
         """Add a FileDescriptor for notification of data available to read."""

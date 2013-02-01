@@ -41,6 +41,21 @@ def Sleep(seconds):
 
 class CopyError(Exception): pass
 
+def NewCopy(src, dst, retry=COPY_RETRY, log_callback=None, **kwargs):
+    """Copy src (url) to dst (url) using the fileservice"""
+    delay_gen = retry_delay_generator()
+    if DEBUG:
+        print "Copying %s to %s"%(src,dst)
+    if 'priority' not in kwargs:
+        kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
+    for num in range(retry):
+        if num and log_callback:
+            log_callback("Retrying copy call. Attempt #%d"%(num+1))
+        #### DO COPY AND RETURN
+        Sleep(delay_gen.next())                   
+    
+    raise CopyError(data)
+
 def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
     delay_gen = retry_delay_generator()
@@ -139,7 +154,7 @@ def List(path,recurse=False, **kwargs):
     return json.loads(data)
 
 def Mkdir(path, **kwargs):
-    from BaseResource import base                               # needs to be imported at runtime to ensure decoupling from import order
+    from yabibe.server.resources.BaseResource import base                               # needs to be imported at runtime to ensure decoupling from import order
 
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
