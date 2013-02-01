@@ -19,7 +19,7 @@ from CallbackHTTPClient import CallbackHTTPClient, CallbackHTTPClientFactory, Ca
 from RememberingHTTPClient import RememberingHTTPClient, RememberingHTTPClientFactory, RememberingHTTPDownloader
 from yabibe.server.ServerContextFactory import ServerContextFactory
 
-DEBUG = False
+DEBUG = True
 
 from yabibe.conf import config
 
@@ -290,11 +290,15 @@ def POST(path,**kws):
     
     postdata=urllib.urlencode(kws)
     #postdata="src=gridftp1/cwellington/bi01/cwellington/test&dst=gridftp1/cwellington/bi01/cwellington/test2"
-    
-    fullpath=str("%s://%s:%d%s"%(scheme,host,port,path))
+
+    if port is not None:
+        fullpath=str("%s://%s:%d%s"%(scheme,host,port,path))
+    else:
+        fullpath=str("%s://%s%s"%(scheme,host,path))
     
     if DEBUG:
-        print "POST =>",fullpath
+        import sys
+        sys.stderr.write("POST => %s\n"%fullpath)
     
     factory = CallbackHTTPClientFactory(
         fullpath,

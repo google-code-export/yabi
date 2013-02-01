@@ -1,4 +1,5 @@
 from yabibe.reactor import GeventReactor
+from twisted.internet.error import ReactorAlreadyInstalledError
 try:
     GeventReactor.install()
 except ReactorAlreadyInstalledError:

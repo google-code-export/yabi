@@ -3,6 +3,7 @@ import gevent
 import random
 import os
 import pickle
+import sys
 
 from yabibe.utils.parsers import parse_url
 
@@ -10,6 +11,13 @@ import traceback
 from yabibe.exceptions import BlockingException
 
 DEBUG = False
+
+if DEBUG:
+    def debug(*args, **kwargs):
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        return
 
 class TaskFailed(Exception):
     pass
@@ -21,19 +29,22 @@ class Task(object):
         # stage in file
         if json:
             self.load_json(json)
+
+    def load_json(self, j, stage=0):
+        return self.load_data(json.loads(j), stage) 
         
-    def load_json(self, json, stage=0):
-        self.json = json
+    def load_data(self, jsondata, stage=0):
+        self.json = jsondata
         
         # check json is okish
         self._sanity_check()
                 
-        self.taskid = json['taskid']
-        self.statusurl = json['statusurl']
-        self.errorurl = json['errorurl']
-        self.yabiusername = json['yabiusername']
+        self.taskid = self.json['taskid']
+        self.statusurl = self.json['statusurl']
+        self.errorurl = self.json['errorurl']
+        self.yabiusername = self.json['yabiusername']
                         
-        self.submission = json['exec']['submission']
+        self.submission = self.json['exec']['submission']
                         
         self.setup_lambdas()
         
@@ -42,7 +53,7 @@ class Task(object):
         self.stage = stage
         
     def setup_lambdas(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure     #, CloseConnections
         # shortcuts for our status and log calls
         self.status = lambda x: Status(self.statusurl,x)
         self.log = lambda x: Log(self.errorurl,x)
@@ -68,7 +79,7 @@ class Task(object):
             setattr(self,key,data[key])
     
     def run(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure    #, CloseConnections
         try:
             self.main()
         except BlockingException, be:
@@ -144,11 +155,11 @@ class Task(object):
             assert key in self.json['exec'], "Task JSON description is missing a vital key inside the 'exec' section. Key name is '%s'"%key
            
 class NullBackendTask(Task):
-    def load_json(self, json, stage=0):
-        Task.load_json(self, json, stage)
+    def load_data(self, jsondata, stage=0):
+        Task.load_data(self, jsondata, stage)
         
         # check if exec scheme is null backend. If this is the case, we need to run our special null backend tasklet
-        scheme, address = parse_url(json['exec']['backend'])
+        scheme, address = parse_url(jsondata['exec']['backend'])
         assert scheme.lower() == "null"
     
     def main(self):
@@ -278,6 +289,7 @@ class MainTask(Task):
     CLEANUP = 4
     
     def __init__(self, json=None):
+        debug("!")
         Task.__init__(self,json)
         
         # for resuming started backend execution jobs
@@ -285,15 +297,15 @@ class MainTask(Task):
         
         self._failed = False
     
-    def load_json(self, json, stage=0):
-        Task.load_json(self, json, stage)
+    def load_data(self, jsondata, stage=0):
+        Task.load_data(self, jsondata, stage)
         
         # check if exec scheme is null backend. If this is the case, we need to run our special null backend tasklet
-        scheme, address = parse_url(json['exec']['backend'])
+        scheme, address = parse_url(self.json['exec']['backend'])
         assert scheme.lower() != "null"
            
     def main(self):
-        
+        debug("main")
         if self.stage == self.STAGEIN:
             self.status("stagein")
             self.stage_in_files()
@@ -364,7 +376,7 @@ class MainTask(Task):
             self._end_stage()
         
     def stage_in_files(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task = self.json
         for copy in task['stagein']:
@@ -427,7 +439,7 @@ class MainTask(Task):
                 
         
     def mkdir(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task=self.json
         
@@ -462,7 +474,7 @@ class MainTask(Task):
         return outputuri,outputdir
         
     def make_stageout(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         stageout = self.json['stageout']
         
@@ -474,7 +486,7 @@ class MainTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
     
     def do(self, outputdir, callfunc):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task=self.json
         retry=True
@@ -563,7 +575,7 @@ class MainTask(Task):
         return self.do(outputdir, lambda *x, **y: Resume( self._jobid, *x, **y))
         
     def stageout(self,outputuri):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task=self.json
         if DEBUG:
@@ -621,7 +633,7 @@ class MainTask(Task):
             raise TaskFailed("Unsupported stageout method %s"%task['stageout_method'])
             
     def cleanup(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task=self.json
         # cleanup working dir

@@ -93,7 +93,7 @@ class FSResource(resource.Resource, BackendResource):
         return resource.Resource.locateChild(self,request,segments)
         
     #
-    # generic fs functions
+    # generic fs functions for direct calls from within yabibe
     #
     def mkdir(self, uri, yabiusername=None, creds={}, priority=0):
         """This is a call for an inner coroutine. This basically works out from the uri what backend is in action,
@@ -107,7 +107,7 @@ class FSResource(resource.Resource, BackendResource):
         port = address.port
         
         if scheme not in self.backends:
-            raise Exception, "Backend '%s' not found\n"%scheme
+            raise Exception, "Backend '%s' not found. Available schemes are: %s\n"%(scheme, ", ".join(self.backends))
             
         return self.GetBackend(scheme).mkdir(hostname,path=path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
 
@@ -169,4 +169,138 @@ class FSResource(resource.Resource, BackendResource):
             raise Exception, "Backend '%s' not found\n"%srcscheme
         
         return self.GetBackend(srcscheme).cp(hostname,src=srcaddress.path,dst=dstaddress.path,port=port, recurse=recurse, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+
+    def copy(self, src, dst, **kwargs):
+        """call with 
+        src and dst - uris.
+        then your credentials as one of:
+        yabiusername: just pass this in to have backend gather credentials
+        or
+        src_key, src_password, src_username, src_cert, dst_key, dst_password, dst_username, dst_cert: If you have the creds pass them in like this
+        """
+        creds = {}
+        yabiusername = None
+
+        KEYSET =    [ "%s_%s"%(part,varname) 
+                      for part in ('src','dst') 
+                      for varname in ('key','password','username','cert')
+                      ]
+        
+        if 'yabiusername' not in kwargs:
+            for keyname in KEYSET:
+                assert keyname in kwargs, "credentials not passed in correctly"
+                
+            # compile any credentials together to pass to backend
+            for keyname in KEYSET:
+                if keyname in kwargs:
+                    if part not in creds:
+                        creds[part]={}
+                    creds[part][varname] = kwargs[keyname]
+        
+        else:
+            yabiusername = kwargs['yabiusername']
+                
+        src_scheme, src_address = parse_url(src)
+        dst_scheme, dst_address = parse_url(dst)
+        
+        src_username = src_address.username
+        dst_username = dst_address.username
+        src_path, src_filename = os.path.split(src_address.path)
+        dst_path, dst_filename = os.path.split(dst_address.path)
+        src_hostname = src_address.hostname
+        dst_hostname = dst_address.hostname
+        src_port = src_address.port
+        dst_port = dst_address.port
+        
+        # backends
+        sbend = self.fsresource().GetBackend(src_scheme)
+        dbend = self.fsresource().GetBackend(dst_scheme)
+        
+        # create our delay generator in case things go pear shape
+        # TODO: actually use these things
+        src_fail_delays = sbend.NonFatalRetryGenerator()
+        dst_fail_delays = dbend.NonFatalRetryGenerator()
+        
+        src_retry_kws = sbend.NonFatalKeywords
+        dst_retry_kws = dbend.NonFatalKeywords
+        
+        # if no dest filename is provided, use the src_filename
+        dst_filename = src_filename if not len(dst_filename) else dst_filename
+        
+        def copy(channel):
+            try:
+                writeproto, fifo = dbend.GetWriteFifo(dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername,creds=creds['dst'] if 'dst' in creds else {})
+                readproto, fifo2 = sbend.GetReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername,creds=creds['src'] if 'src' in creds else {})
+                
+                def fifo_cleanup(response):
+                    os.unlink(fifo)
+                    return response
+                channel.addCallback(fifo_cleanup)
+                
+            except BlockingException, be:
+                print traceback.format_exc()
+                channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
+                return
+            
+            # keep a weakref in the module level info store so we can get a profile of all copy operations
+            if yabiusername not in copies_in_progress:
+                copies_in_progress[yabiusername]=[]
+            copies_in_progress[yabiusername].append( (src,dst,weakref.ref(readproto),weakref.ref(writeproto)) )
+            
+            if DEBUG:
+                print "READ:",readproto,fifo2
+                print "WRITE:",writeproto,fifo
+                       
+            # wait for one to finish
+            while not readproto.isDone() and not writeproto.isDone():
+                gevent.sleep()
+            
+            # if one died and not the other, then kill the non dead one
+            if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
+                # readproto failed. write proto is still running. Kill it
+                if DEBUG:
+                    print "READ FAILED",readproto.exitcode,writeproto.exitcode
+                print "read failed. attempting os.kill(",writeproto.transport.pid,",",signal.SIGKILL,")",type(writeproto.transport.pid),type(signal.SIGKILL)
+                while writeproto.transport.pid==None:
+                    #print "writeproto transport pid not set. waiting for setting..."
+                    gevent.sleep()
+                os.kill(writeproto.transport.pid, signal.SIGKILL)
+            else:
+                # wait for write to finish
+                if DEBUG:
+                    print "WFW",readproto.exitcode,writeproto.exitcode
+                while writeproto.exitcode == None:
+                    gevent.sleep()
+                
+                # did write succeed?
+                if writeproto.exitcode == 0:
+                    if DEBUG:
+                        print "WFR",readproto.exitcode,writeproto.exitcode
+                    while readproto.exitcode == None:
+                        gevent.sleep()
+            
+            if readproto.exitcode==0 and writeproto.exitcode==0:
+                if DEBUG:
+                    print "Copy finished exit codes 0"
+                    print "readproto:"
+                    print "ERR:",readproto.err
+                    print "OUT:",readproto.out
+                    print "writeproto:"
+                    print "ERR:",writeproto.err
+                    print "OUT:",writeproto.out
+                    
+                channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "Copy OK\n"))
+            else:
+                rexit = "Killed" if readproto.exitcode==None else str(readproto.exitcode)
+                wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
+                
+                msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
+                #print "MSG",msg
+                channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, msg))
+                
+        client_channel = defer.Deferred()
+        
+        tasklet = gevent.spawn(copy,client_channel)
+        
+        return client_channel
 
