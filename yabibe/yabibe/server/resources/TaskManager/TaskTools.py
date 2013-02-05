@@ -1,13 +1,15 @@
 """All these funcs are done in a blocking manner using a stackless aproach. Not your normal funcs"""
 import json
 import os, urllib
+import sys
 
 import gevent
+import signal
 
 from yabibe.conf import config
 from yabibe.utils.geventtools import GET, POST, GETFailure, RetryGET, RetryPOST
 from yabibe.utils.parsers import parse_url
-from yabibe.exceptions import CredentialNotFound
+from yabibe.exceptions import CredentialNotFound, BlockingException
 
 COPY_RETRY = LINK_RETRY = LCOPY_RETRY = 5
 
@@ -35,28 +37,174 @@ def retry_delay_generator():
         yield delay
         delay *= 2.0        # double it
 
+def debug(*args, **kwargs):
+    sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
+
 def Sleep(seconds):
     """sleep tasklet for this many seconds. seconds is a float"""
     gevent.sleep(seconds)
 
 class CopyError(Exception): pass
 
-def NewCopy(src, dst, retry=COPY_RETRY, log_callback=None, **kwargs):
+def Copy(src, dst, retry=COPY_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
+    def log(msg):
+        if log_callback:
+            return log_callback(msg)
+        
     delay_gen = retry_delay_generator()
     if DEBUG:
         print "Copying %s to %s"%(src,dst)
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
     for num in range(retry):
-        if num and log_callback:
-            log_callback("Retrying copy call. Attempt #%d"%(num+1))
-        #### DO COPY AND RETURN
-        Sleep(delay_gen.next())                   
-    
-    raise CopyError(data)
+        if num:
+            log("Retrying copy call. Attempt #%d"%(num+1))
 
-def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
+        result, message, blocked = do_streaming_copy( src, dst, yabiusername=kwargs['yabiusername'] )
+
+        debug("result is",result)
+
+        if result:
+            # success
+            log(message)
+            debug("log",message)
+            return
+
+        # fails
+        log(message)
+
+        # todo: handle blocked
+        dly = delay_gen.next()
+        debug("sleeping",dly)
+        Sleep(dly)                   
+    
+    raise CopyError(message)
+
+def do_streaming_copy(src, dst, **kwargs):
+    """call with 
+        src and dst - uris.
+        then your credentials as one of:
+        yabiusername: just pass this in to have backend gather credentials
+        or
+        src_key, src_password, src_username, src_cert, dst_key, dst_password, dst_username, dst_cert: If you have the creds pass them in like this
+
+        returns:
+        success_bool, message, blocked
+        """
+    creds = {}
+    yabiusername = None
+
+    if 'yabiusername' not in kwargs:
+        for keyname in self.KEYSET:
+            assert keyname in kwargs, "credentials not passed in correctly"
+
+        # compile any credentials together to pass to backend
+        for keyname in self.KEYSET:
+            if keyname in kwargs:
+                if part not in creds:
+                    creds[part]={}
+                creds[part][varname] = kwargs[keyname]
+
+    else:
+        yabiusername = kwargs['yabiusername']
+
+    src_scheme, src_address = parse_url(src)
+    dst_scheme, dst_address = parse_url(dst)
+
+    src_username = src_address.username
+    dst_username = dst_address.username
+    src_path, src_filename = os.path.split(src_address.path)
+    dst_path, dst_filename = os.path.split(dst_address.path)
+    src_hostname = src_address.hostname
+    dst_hostname = dst_address.hostname
+    src_port = src_address.port
+    dst_port = dst_address.port
+
+    # backends
+    from yabibe.server.resources.BaseResource import base
+    sbend = base.fs.GetBackend(src_scheme)
+    dbend = base.fs.GetBackend(dst_scheme)
+
+    # create our delay generator in case things go pear shape
+    # TODO: actually use these things
+    src_fail_delays = sbend.NonFatalRetryGenerator()
+    dst_fail_delays = dbend.NonFatalRetryGenerator()
+
+    src_retry_kws = sbend.NonFatalKeywords
+    dst_retry_kws = dbend.NonFatalKeywords
+
+    # if no dest filename is provided, use the src_filename
+    dst_filename = src_filename if not len(dst_filename) else dst_filename
+
+    fifo = None
+    try:
+        writeproto, fifo = dbend.GetWriteFifo(dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername,creds=creds['dst'] if 'dst' in creds else {})
+        readproto, fifo2 = sbend.GetReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername,creds=creds['src'] if 'src' in creds else {})
+
+        # some debug information
+        debug("readproto=",readproto,"readfifo=",fifo2)
+        debug("writeproto=",writeproto,"writefifo=",fifo)
+
+        # wait for one to finish
+        while not readproto.isDone() and not writeproto.isDone():
+            gevent.sleep()
+
+        # if one died and not the other, then kill the non dead one
+        if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
+            # readproto failed. write proto is still running. Kill it
+            debug('read failed',readproto.exitcode,writeproto.exitcode)
+
+            # wait for task to get pid (startup) so we can kill it
+            while writeproto.transport.pid==None:
+                gevent.sleep()
+
+            # kill the other side
+            debug("!")
+            os.kill(writeproto.transport.pid, signal.SIGKILL)
+            debug('killed')
+        else:
+            # wait for write to finish
+            debug('write... ready for write',readproto.exitcode,writeproto.exitcode)
+            while writeproto.exitcode == None:
+                gevent.sleep()
+
+            # did write succeed?
+            if writeproto.exitcode == 0:
+                debug("write... ready for read",readproto.exitcode,writeproto.exitcode)
+                while readproto.exitcode == None:
+                    gevent.sleep()
+
+        debug(readproto.exitcode,writeproto.exitcode)
+
+        # did they both exit success?
+        if readproto.exitcode==0 and writeproto.exitcode==0:
+            debug('Copy finished exit codes 0')
+            debug('readproto err:',readproto.err,'out:',readproto.out)
+            debug('writeproto err:',writeproto.err,'out:',writeproto.out)
+
+            # call the callback for the outcome
+            return (True, "Copy OK", False)
+        else:
+            rexit = "Killed" if readproto.exitcode==None else str(readproto.exitcode)
+            wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
+
+            msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
+
+            debug(msg)
+
+            return (False, msg, False)
+
+    except BlockingException, be:
+        return (False, "Copy Process Blocked", True)
+
+    finally:
+        # delete fifo
+        if fifo:
+            os.unlink(fifo)
+
+
+def OldCopy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
     delay_gen = retry_delay_generator()
     if DEBUG:
@@ -86,39 +234,6 @@ def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
         Sleep(delay_gen.next())                   
     
     raise CopyError(data)
-
-#def Copy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
-    #delay_gen = retry_delay_generator()
-    #if DEBUG:
-        #print "Copying %s to %s"%(src,dst)
-    #if 'priority' not in kwargs:
-        #kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
-    #for num in range(retry):
-        #if num and log_callback:
-            #log_callback("Retrying copy call. Attempt #%d"%(num+1))
-        #try:
-            #pass
-        
-            
-            
-            #if DEBUG:
-                #print "code=",repr(code)
-            #if int(code)==200:
-                ## success!
-                #return True
-            #else:
-                ##print "FAIL"
-                #if log_callback:
-                    #log_callback("Copy %s to %s failed with %d:%s"%(src,dst,code,message))
-                
-        #except GETFailure, err:
-            #print "Warning: copy failed with error:",err
-            #if log_callback:
-                #log_callback("Warning: copy failed with error: %s"%(err))
-            
-        #Sleep(delay_gen.next())                   
-    
-    #raise CopyError(data)
     
 def RCopy(src, dst, log_callback=None, **kwargs):
     #print "RCopying %s to %s"%(src,dst)
@@ -217,8 +332,7 @@ def LCopy(src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
     raise CopyError(data)
 
 def SmartCopy(preferred,src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
-    if DEBUG:
-        print "Smart-Copying %s to %s"%(src,dst)
+    debug("Smart-Copying",src,"to",dst)
     
     srcscheme, srcaddress = parse_url(src)
     dstscheme, dstaddress = parse_url(dst)

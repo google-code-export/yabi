@@ -21,6 +21,9 @@ from yabibe.server.ServerContextFactory import ServerContextFactory
 
 DEBUG = True
 
+def debug(*args, **kwargs):
+    sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
+
 from yabibe.conf import config
 
 USER_AGENT = "YabiGevent/0.1"

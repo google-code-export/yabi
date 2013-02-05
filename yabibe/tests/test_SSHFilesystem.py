@@ -238,8 +238,8 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
                 #with self.assertRaises( InvalidPath ):
                 res = self.sshfs.rm("localhost",tc['username'],path, creds={'user':tc['username'],
-                                                                                   'username':tc['username'],
-                                                                                   'password':tc['password'] } )
+                                                                            'username':tc['username'],
+                                                                            'password':tc['password'] } )
 
                 # when rm succeeds its output is nothing
                 self.assertFalse( res.strip() )

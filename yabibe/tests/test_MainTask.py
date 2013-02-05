@@ -19,6 +19,7 @@ import pwd
 
 from config import TestConfig
 from FileSet import FileSet, TempFile
+from StubAdminServer import make_server
                 
 from yabibe.server.resources.TaskManager.Task import MainTask
 from yabibe.server.resources.BaseResource import base
@@ -37,6 +38,15 @@ def make_conf(conf):
         for subkey in conf[key]:
             output.append('%s: %s'%(subkey,conf[key][subkey]))
     return '\n'.join(output)+'\n'
+
+def createfile(filename, blocks=1, bs=1024):
+    with open(filename, 'wb') as fh:
+        for i in range(blocks):
+            fh.write(createdata(bs))
+
+def createdata(count):
+    return "".join( [ random.choice("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()-=_+[]{}\\|;:'\",<.>/?`~")
+                                  for X in range(count) ] )
 
 class write_config(object):
     def __init__(self, conf):
@@ -122,18 +132,42 @@ class MainTaskTestSuite(unittest.TestCase):
 
         self.assertTrue(hasattr(task,'json'))
 
-    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/',
+    @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8080/',
                                                          'hmackey':'dummyhmac',
                                                          'admin_cert_check':False,
                                                          'start_https':False,
                                                          'certificates':"/tmp/certs"
                                                          }} )
-    @patch('yabibe.server.resources.TaskManager.TaskTools.Status',StatusMock)
-    @patch('yabibe.server.resources.TaskManager.TaskTools.Log',LogMock)
+    @patch('yabibe.server.resources.TaskManager.TaskTools.Status',StatusMock)       # our test status call
+    @patch('yabibe.server.resources.TaskManager.TaskTools.Log',LogMock)             # our test log call
+    @patch('yabibe.server.resources.TaskManager.TaskTools.Sleep',MagicMock())       # retry delays have no effect
     def test_main_task_run(self):
         # load connectors
         base.LoadConnectors()
-        
+
+        # path to a testing area
+        path = os.path.join(self.testdir,"testdir")
+        os.makedirs(path)
+
+        # give ourselves write access to the dir
+        os.chmod(path, 0777)
+
+        # dest and source
+        dpath = os.path.join( path, "dest.dat" ) 
+        spath = os.path.join( path, "source.dat" )
+        createfile(spath,blocks=128)
+
+        # our config
+        tc = TestConfig()
+
+        # make server
+        debug('starting server')
+        services = {
+            ('/ws/credential/exec/testuser/','uri=localex%3A//localhost/'):('text/json','{}')
+        }
+        server = make_server(services)
+        debug('started',server)
+
         data = """
 {
     "taskid": "task-101",
@@ -142,8 +176,8 @@ class MainTaskTestSuite(unittest.TestCase):
     "stagein":
     [
       {
-        "src": "localfs://localhost/tmp/test-stage-input",
-        "dst": "localfs://localhost/tmp/test-stage-output",
+        "src": "localfs://localhost%s",
+        "dst": "localfs://localhost%s",
         "order": 0
       }
     ],
@@ -158,7 +192,7 @@ class MainTaskTestSuite(unittest.TestCase):
       "workingdir":"working"
     }
 }
-"""
+"""%(spath,dpath,tc['username'])
 
         task = MainTask()
         task.load_json(data)
