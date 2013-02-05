@@ -172,7 +172,7 @@ class LocalShell(object):
         subenv = self._make_env()
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
         
         return self.execute(LocalShellProcessProtocol(),command=[CP_PATH,fifo,self._make_echo(path)]), fifo
         
@@ -180,7 +180,7 @@ class LocalShell(object):
         subenv = self._make_env()
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
                 
         return self.execute(LocalShellProcessProtocol(),command=[CP_PATH,self._make_echo(path),fifo]), fifo
 
@@ -188,7 +188,7 @@ class LocalShell(object):
         subenv = self._make_env()
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
         
         path,filename = os.path.split(path)
         
@@ -198,7 +198,7 @@ class LocalShell(object):
         subenv = self._make_env()
         
         if not fifo:
-            fifo = Fifos.Get()
+            fifo = Fifos.get()
                 
         path,filename = os.path.split(path)
         

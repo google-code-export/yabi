@@ -10,7 +10,7 @@ from yabibe.utils.parsers import parse_url
 import traceback
 from yabibe.exceptions import BlockingException
 
-DEBUG = False
+DEBUG = True
 
 if DEBUG:
     def debug(*args, **kwargs):
@@ -309,11 +309,13 @@ class MainTask(Task):
         if self.stage == self.STAGEIN:
             self.status("stagein")
             self.stage_in_files()
+            debug('stagein done')
                 
             self._next_stage()
                 
         if self.stage == self.MKDIR:
             # make our working directory
+            debug('mkdir')
             self.status("mkdir")
             self.outuri, self.outdir = self.mkdir()                     # make the directories we are working in
         
@@ -321,6 +323,7 @@ class MainTask(Task):
         
         if self.stage == self.EXEC:
             # now we are going to run the job
+            debug('exec')
             self.status("exec")
             try:
                 if self._jobid is None:
@@ -441,18 +444,24 @@ class MainTask(Task):
     def mkdir(self):
         from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
+        debug('inside mkdir')
+
         task=self.json
         
         # get our credential working directory. We lookup the execution backends auth proxy cache, and get the users home directory from that
         # this comes from their credentials.
         scheme, address = parse_url(task['exec']['backend'])
+        debug('calling usercreds')
         usercreds = UserCreds(self.yabiusername, task['exec']['backend'], credtype="exec")
         workingdir = task['exec']['workingdir']
+
+        debug('scheme:',scheme,'address',address)
+        debug('usercreds',usercreds)
+        debug('workingdir',workingdir)
         
         assert address.path=="/", "Error. JSON[exec][backend] has a path. Execution backend URI's must not have a path (path is %s)"%address.path 
         
-        if DEBUG:
-            print "USERCREDS",usercreds
+        debug("USERCREDS",usercreds)
         
         fsbackend = task['exec']['fsbackend']
         
