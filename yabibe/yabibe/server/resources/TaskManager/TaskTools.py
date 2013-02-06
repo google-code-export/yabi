@@ -25,10 +25,13 @@ RM_PATH = "/fs/rm"
 
 USER_AGENT = "YabiStackless/0.1"
 
-DEBUG = False
-
 DEFAULT_TASK_PRIORITY = 100
 
+DEBUG = True
+
+def debug(*args, **kwargs):
+    import sys
+    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
 def retry_delay_generator():
     """this is the delay generator for the pausing between retrying failed copy/lcopy/links"""
@@ -271,6 +274,8 @@ def List(path,recurse=False, **kwargs):
 def Mkdir(path, **kwargs):
     from yabibe.server.resources.BaseResource import base                               # needs to be imported at runtime to ensure decoupling from import order
 
+    debug("Mkdir(",path,kwargs,")")
+
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
 
@@ -389,8 +394,28 @@ def RemoteInfo(statuspath, message):
     else:
         code,msg,data = RetryPOST(statuspath, scheme=config.yabiadminscheme, host=config.yabiadminserver,port=config.yabiadminport, remote_info=message)              # error exception should bubble up and be caught
     assert code==200
+
+def Exec( uri, yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
+    #uri, submission_script, submission_vars, yabiusername, working, status, taskid):
+    """execute a job on a backend"""
+    scheme, address = parse_url(uri)
+    username = address.username
+    path = address.path
+    hostname = address.hostname
+    basepath, filename = os.path.split(path)
+
+    # find which backend
+    from yabibe.server.resources.BaseResource import base
+    bend = base.ex.GetBackend(scheme)
+
+    debug( "Backend:", bend )
+
+    debug(submission_data)
+
+    result = bend.run( yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
+    debug("bend.run result:",result)
     
-def Exec(backend, command, callbackfunc=None, **kwargs):
+def ExecOld(backend, command, callbackfunc=None, **kwargs):
     if DEBUG:
         print "EXEC:",backend,"command:",command,"kwargs:",kwargs
    

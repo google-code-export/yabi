@@ -307,15 +307,14 @@ class MainTask(Task):
     def main(self):
         debug("main")
         if self.stage == self.STAGEIN:
-            self.status("stagein")
+            self.status("===stagein===")
             self.stage_in_files()
-            debug('stagein done')
                 
             self._next_stage()
                 
         if self.stage == self.MKDIR:
             # make our working directory
-            debug('mkdir')
+            debug('===mkdir===')
             self.status("mkdir")
             self.outuri, self.outdir = self.mkdir()                     # make the directories we are working in
         
@@ -323,7 +322,7 @@ class MainTask(Task):
         
         if self.stage == self.EXEC:
             # now we are going to run the job
-            debug('exec')
+            debug('===exec===')
             self.status("exec")
             try:
                 if self._jobid is None:
@@ -347,6 +346,7 @@ class MainTask(Task):
  
         if self.stage == self.STAGEOUT:
             # stageout
+            debug('===stageout===')
             self.log("Staging out results")
             self.status('stageout')
         
@@ -355,13 +355,16 @@ class MainTask(Task):
         
             # make sure we have the stageout directory
             self.log("making stageout directory %s"%self.json['stageout'])
+            debug('===make_stageout===')
             self.make_stageout()
-        
+
+            debug("===stageout()====")
             self.stageout(self.outuri)
         
             self._next_stage()
             
         if self.stage == self.CLEANUP:
+            debug('===cleanup===')
         
             # cleanup
             self.status("cleaning")
@@ -495,7 +498,8 @@ class MainTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
     
     def do(self, outputdir, callfunc):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure
+        from yabibe.utils.geventtools import CloseConnections
 
         task=self.json
         retry=True
@@ -536,11 +540,15 @@ class MainTask(Task):
                         'stdout':'STDOUT.txt',
                         'stderr':'STDERR.txt'
                     }
-                    submission_data.apply(extras)
+                    submission_data.update(extras)
+
+                    debug("WORKING DIR:",task['exec']['workingdir'])
                     
                     #print "callfunc is",callfunc
                     #callfunc(uri, command=task['exec']['command'], remote_info=task['remoteinfourl'], submission=self.submission, stdout="STDOUT.txt",stderr="STDERR.txt", callbackfunc=_task_status_change, yabiusername=self.yabiusername, **extras)     # this blocks untill the command is complete. or the execution errored
-                    callfunc(uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change)
+                    debug(callfunc,"(",uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change,")")
+                    #callfunc(uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change)
+                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )
                     
                     unfinished = set(("pending", "unsubmitted", "running"))
                     received_so_far = set(self.exec_status)
@@ -587,35 +595,29 @@ class MainTask(Task):
         from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         task=self.json
-        if DEBUG:
-            print "STAGEOUT:",task['stageout'],"METHOD:",task['stageout_method']
+        debug( "STAGEOUT:",task['stageout'],"METHOD:",task['stageout_method'] )
         
         if task['stageout_method']=='copy':   
-            try:
-                if DEBUG:
-                    print "Mkdir(",task['stageout'],",",self.yabiusername,")"
-                Mkdir(task['stageout'], yabiusername=self.yabiusername)
-            except GETFailure, error:
-                pass
+            debug("Mkdir(",task['stageout'],",",self.yabiusername,")")
+            Mkdir(task['stageout'], yabiusername=self.yabiusername)
             
-            try:
-                if DEBUG:
-                    print "RCopy(",outputuri,",",task['stageout'],",",self.yabiusername,")"
-                RCopy(outputuri,task['stageout'],yabiusername=self.yabiusername,contents=True,log_callback=self.log)
-                self.log("Files successfuly staged out")
-            except GETFailure, error:
-                if "503" in error.message[1]:
-                        raise                               # reraise a blocking error so our top level catcher will catch it and block the task
-                # error executing
-                print "TASK[%s]: Stageout failed!"%(self.taskid)
-                self.status("error")
-                if DEBUG:
-                    self.log("Staging out remote %s to %s failed... \n%s"%(outputuri,task['stageout'],traceback.format_exc()))
-                else:
-                    self.log("Staging out remote %s to %s failed... %s"%(outputuri,task['stageout'],error))
+            debug("RCopy(",outputuri,",",task['stageout'],",",self.yabiusername,")")
+            RCopy(outputuri,task['stageout'],yabiusername=self.yabiusername,contents=True,log_callback=self.log)
+            self.log("Files successfuly staged out")
+
+            ## except GETFailure, error:
+            ##     if "503" in error.message[1]:
+            ##             raise                               # reraise a blocking error so our top level catcher will catch it and block the task
+            ##     # error executing
+            ##     print "TASK[%s]: Stageout failed!"%(self.taskid)
+            ##     self.status("error")
+            ##     if DEBUG:
+            ##         self.log("Staging out remote %s to %s failed... \n%s"%(outputuri,task['stageout'],traceback.format_exc()))
+            ##     else:
+            ##         self.log("Staging out remote %s to %s failed... %s"%(outputuri,task['stageout'],error))
                 
-                # finish task
-                raise TaskFailed("Stageout failed")
+            ##     # finish task
+            ##     raise TaskFailed("Stageout failed")
         elif task['stageout_method']=='lcopy':
             try:
                 Mkdir(task['stageout'], yabiusername=self.yabiusername)

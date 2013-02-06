@@ -27,7 +27,7 @@ class BaseResource(resource.PostableResource):
         self.child_debug = TaskManagerResource()
         self.child_pickle = TaskManagerPickleResource()
         
-    #def LoadExecConnectors(self, quiet=False):
+    def LoadExecConnectors(self, quiet=False):
         #return
     
         ## from yabibe.connectors.ex.SGEConnector import SGEConnector
@@ -36,10 +36,10 @@ class BaseResource(resource.PostableResource):
         ## from yabibe.connectors.ex.SSHTorqueConnector import SSHTorqueConnector
         ## from yabibe.connectors.ex.SSHPbsproConnector import SSHPbsproConnector
         ## from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
-        ## from yabibe.connectors.ex.LocalConnector import LocalConnector
+        from yabibe.connectors.ex.LocalConnector import LocalConnector
         ## from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
         
-        ## self.child_exec.LoadConnectors(quiet)
+        self.child_exec.LoadConnectors(quiet)
         
     def LoadFSConnectors(self, quiet=False):
         from yabibe.connectors.fs.SSHFilesystem import SSHFilesystem
@@ -49,7 +49,7 @@ class BaseResource(resource.PostableResource):
         self.child_fs.LoadConnectors(quiet)
         
     def LoadConnectors(self, quiet=False):
-        #self.LoadExecConnectors(quiet)
+        self.LoadExecConnectors(quiet)
         self.LoadFSConnectors(quiet)
         
     def render(self, ctx):
