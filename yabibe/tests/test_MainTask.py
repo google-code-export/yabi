@@ -136,7 +136,8 @@ class MainTaskTestSuite(unittest.TestCase):
                                                          'hmackey':'dummyhmac',
                                                          'admin_cert_check':False,
                                                          'start_https':False,
-                                                         'certificates':"/tmp/certs"
+                                                         'certificates':"/tmp/certs",
+                                                         'temp':'/tmp'
                                                          }} )
     @patch('yabibe.server.resources.TaskManager.TaskTools.Status',StatusMock)       # our test status call
     @patch('yabibe.server.resources.TaskManager.TaskTools.Log',LogMock)             # our test log call
@@ -162,40 +163,52 @@ class MainTaskTestSuite(unittest.TestCase):
 
         # make server
         debug('starting server')
+
+        # our users creds for json encoding
+        creds = {
+            'name':'localfs backend',
+            'scheme':'localfs',
+            'homedir':'/tmp',
+            'credential':'Users Credential',
+            'username':'dummyusername',
+            'password':'dummypassword',
+            'cert':'dummycert',
+            'key':'dummykey'
+        }
+        
         services = {
-            ('/ws/credential/exec/testuser/','uri=localex%3A//localhost/'):('text/json','{}')
+            ('/ws/credential/exec/testuser/','uri=localex%3A//localhost/'):('text/json',json.dumps(creds))
         }
         server = make_server(services)
         debug('started',server)
 
-        data = """
-{
-    "taskid": "task-101",
-    "statusurl":"http://localhost:80/",
-    "errorurl":"http://localhost:80/",
-    "stagein":
-    [
-      {
-        "src": "localfs://localhost%s",
-        "dst": "localfs://localhost%s",
-        "order": 0
-      }
-    ],
-    "stageout":"/tmp",
-    "yabiusername":"%s",
-    "exec":
-    {
-      "submission":"blah",
-      "backend":"localex://localhost/",
-      "command":"command",
-      "fsbackend":"fsbackend",
-      "workingdir":"working"
-    }
-}
-"""%(spath,dpath,tc['username'])
+        job_data = {
+            "taskid": "task-101",
+            "statusurl":"http://localhost:80/",
+            "errorurl":"http://localhost:80/",
+            "stagein": [
+            {
+                "src": "localfs://localhost%s"%spath,
+                "dst": "localfs://localhost%s"%dpath,
+                "order": 0
+            } ],
+            "stageout":"localfs://localhost/tmp",
+            "stageout_method":"copy",
+            "yabiusername":tc['username'],
+            "exec":
+            {
+                "submission":"blah",
+                "backend":"localex://localhost/",
+                "command":"command",
+                "fsbackend":"localfs://localhost/tmp/",
+                "workingdir":"/tmp"
+            }
+        }
 
+        jobjson = json.dumps(job_data)
+        
         task = MainTask()
-        task.load_json(data)
+        task.load_json(jobjson)
         debug(1)
 
         def threadlet():
