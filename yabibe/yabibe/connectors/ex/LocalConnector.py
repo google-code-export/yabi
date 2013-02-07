@@ -11,7 +11,15 @@ ENV_CHECK = []
 # the schema we will be registered under. ie. schema://username@hostname:port/path/
 SCHEMA = "localex"
 
-DEBUG = False
+DEBUG = True
+
+if DEBUG:
+    import sys
+    def debug(*args, **kwargs):
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        return
 
 from twistedweb2 import http, responsecode, http_headers, stream
 
@@ -151,6 +159,7 @@ class LocalConnector(ExecConnector):
         log: callback for log messages to go to admin
         """
         try:
+            debug("calling state!",state)
             state("Unsubmitted")
             gevent.sleep(self.delay)
             state("Pending")
@@ -193,6 +202,7 @@ class LocalConnector(ExecConnector):
                 
             state("Error")               
         except Exception, ee:
+            debug(ee)
             import traceback
             traceback.print_exc()
             state("Error")
