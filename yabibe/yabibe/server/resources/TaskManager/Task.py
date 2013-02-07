@@ -327,14 +327,12 @@ class MainTask(Task):
             try:
                 if self._jobid is None:
                     # start a fresh taskjob
-                    if DEBUG:
-                        print "Executing fresh:",self._jobid
+                    debug( "Executing fresh:",self._jobid )
                     self.execute(self.outdir)                        # TODO. implement picking up on this exec task without re-running it??
             
                 else:
                     # reconnect with this taskjob
-                    if DEBUG:
-                        print "Reconnecting with taskjob:",self._jobid
+                    debug( "Reconnecting with taskjob:",self._jobid )
                     self.resume(self.outdir)
             
             except TaskFailed, ex:
@@ -512,10 +510,13 @@ class MainTask(Task):
                 # callback for job execution status change messages
                 def _task_status_change(line):
                     """Each line that comes back from the webservice gets passed into this callback"""
+                    debug("_task_status_change(",line,")")
                     line = line.strip()
                     self.log("Remote execution backend sent status message: %s"%(line))
                     status = line.lower()
+                    debug("exec_status was:",self.exec_status)
                     self.exec_status.append(status)
+                    debug("now",self.exec_status)
                     self.status("exec:%s"%(status))
                     
                 def _task_id_change(value):
@@ -538,7 +539,8 @@ class MainTask(Task):
                     submission_data = {
                         'command':task['exec']['command'],
                         'stdout':'STDOUT.txt',
-                        'stderr':'STDERR.txt'
+                        'stderr':'STDERR.txt',
+                        'working':task['exec']['workingdir']
                     }
                     submission_data.update(extras)
 
@@ -548,15 +550,11 @@ class MainTask(Task):
                     #callfunc(uri, command=task['exec']['command'], remote_info=task['remoteinfourl'], submission=self.submission, stdout="STDOUT.txt",stderr="STDERR.txt", callbackfunc=_task_status_change, yabiusername=self.yabiusername, **extras)     # this blocks untill the command is complete. or the execution errored
                     debug(callfunc,"(",uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change,")")
                     #callfunc(uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change)
-                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )
-                    
-                    unfinished = set(("pending", "unsubmitted", "running"))
-                    received_so_far = set(self.exec_status)
-                    # Loop while all statuses received so far are unfinished
-                    while len(received_so_far - unfinished) == 0:
-                        gevent.sleep(1.0)
-                        received_so_far = set(self.exec_status)
+                    debug("----")
+                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, debug, debug )     #self.log, self.log )
 
+                    # this now blocks until its success or failure
+                    
                     if filter(lambda s: 'error' in s, self.exec_status):
                         print "TASK[%s]: Execution failed!"%(self.taskid)
                         self.status("error")
@@ -565,6 +563,7 @@ class MainTask(Task):
                         # finish task
                         raise TaskFailed("Execution failed")
                     else:
+                        debug("FINISHED")
                         self.log("Execution finished")
                 except GETFailure, error:
                     if "503" in error.message[1]:

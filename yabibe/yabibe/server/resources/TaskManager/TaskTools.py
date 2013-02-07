@@ -237,8 +237,180 @@ def OldCopy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
         Sleep(delay_gen.next())                   
     
     raise CopyError(data)
-    
-def RCopy(src, dst, log_callback=None, **kwargs):
+
+def RCopy(src, dst, yabiusername,  copy_contents=False, log_callback=None, **kwargs):
+    """
+    if 'copy_contents' is set, then copy the contents of the source directory, not the directory itself (like going cp -r src/* dst/)
+    """
+    if not dst.endswith('/'):
+        dst += '/'
+            
+    # parse the source and dest uris
+    src_scheme, src_address = parse_url(src)
+    dst_scheme, dst_address = parse_url(dst)
+            
+    src_username = src_address.username
+    dst_username = dst_address.username
+    src_path, src_filename = os.path.split(src_address.path)
+    dst_path, dst_filename = os.path.split(dst_address.path)
+    src_hostname = src_address.hostname
+    dst_hostname = dst_address.hostname
+    src_port = src_address.port
+    dst_port = dst_address.port
+
+    #backends
+    from yabibe.server.resources.BaseResource import base
+    sbend = base.fs.GetBackend(src_scheme)
+    dbend = base.fs.GetBackend(dst_scheme)
+            
+    try:
+        writeproto, fifo = dbend.GetCompressedWriteFifo( dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername)
+        readproto, fifo2 = sbend.GetCompressedReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername)
+
+        debug("FROM",src_path,"TO",dst_path)
+        os.system("ls -alF '%s' > /tmp/files.txt"%src_path)
+
+        # TODO: put following in finally clause
+            ## def fifo_cleanup(response):
+            ##     os.unlink(fifo)
+            ##     return response
+            ## result_channel.addCallback(fifo_cleanup)
+
+        ## except BlockingException, be:
+        ##     #sbend.unlock(locks[0])
+        ##     #if locks[1]:
+        ##         #dbend.unlock(locks[1])
+        ##     print traceback.format_exc()
+        ##     result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
+        ##     return
+        
+        debug("READ:",readproto,fifo2)
+        debug("WRITE:",writeproto,fifo)
+
+        # wait for one to finish
+        while not readproto.isDone() and not writeproto.isDone():
+            gevent.sleep()
+
+        # if one died and not the other, then kill the non dead one
+        if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
+            # readproto failed. write proto is still running. Kill it
+            debug("READ FAILED",readproto.exitcode,writeproto.exitcode)
+            debug("read failed. attempting os.kill(",writeproto.transport.pid,",",signal.SIGKILL,")",type(writeproto.transport.pid),type(signal.SIGKILL)) # TODO: use log?
+            while writeproto.transport.pid==None:
+                #print "writeproto transport pid not set. waiting for setting..."
+                gevent.sleep()
+            os.kill(writeproto.transport.pid, signal.SIGKILL)
+        else:
+            # wait for write to finish
+            debug("WFW",readproto.exitcode,writeproto.exitcode)
+            while writeproto.exitcode == None:
+                gevent.sleep()
+
+            # did write succeed?
+            if writeproto.exitcode == 0:
+                debug("WFR",readproto.exitcode,writeproto.exitcode)
+                while readproto.exitcode == None:
+                    gevent.sleep()
+
+        if readproto.exitcode==0 and writeproto.exitcode==0:
+            debug("Copy finished exit codes 0")
+            debug("readproto:")
+            debug("ERR:",readproto.err)
+            debug("OUT:",readproto.out)
+            debug("writeproto:")
+            debug("ERR:",writeproto.err)
+            debug("OUT:",writeproto.out)
+
+            return True, "OK"
+        else:
+            rexit = "Killed" if readproto.exitcode==None else str(readproto.exitcode)
+            wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
+
+            msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
+            return False, msg
+
+    except NotImplemented, ni:    
+        ##
+        ## Fallback to old manual rcopy
+        ##
+        print "NO FALLBACK", ni
+        return
+
+        # get a recursive listing of the source
+        try:
+            fsystem = List(path=src,recurse=True,yabiusername=yabiusername)
+        except BlockingException, be:
+            print traceback.format_exc()
+            result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+
+        # lets split the source path on separator
+        destination_dir_name = "" if copy_contents else ([X for X in src.split("/") if len(X)][-1]+'/')
+
+        # remember the directories we make so we only make them once
+        created=[]
+
+        # count the files we copy
+        file_count = 0
+        folder_count = 0
+
+        for directory in sorted(fsystem.keys()):
+            # make directory
+            destpath = directory[len(src_path)+1:]              # the subpath part
+            if len(destpath) and destpath[-1]!='/':
+                destpath += '/'
+            #print "D:",dst,":",destpath,";",src_path
+            if dst+destination_dir_name+destpath not in created:
+                #print dst+destination_dir_name+destpath,"not in",created
+                try:
+                    Mkdir(dst+destination_dir_name+destpath,yabiusername=yabiusername)
+                    folder_count += 1
+                except BlockingException, be:
+                    print traceback.format_exc()
+                    result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )    
+                except GETFailure, gf:
+                    # ignore. directory probably already exists
+                    pass
+                created.append(dst+destination_dir_name+destpath)
+
+            for file,size,date,link in fsystem[directory]['files']:
+                if DEBUG:
+                    print "COPY",file,size,date
+                    print "EXTRA",">",destpath,">",directory
+                src_uri = src+destpath+file
+                dst_uri = dst+destination_dir_name+destpath+file
+
+                if DEBUG:
+                    print "Copy(",src_uri,",",dst_uri,")"
+                #print "Copy(",sbend+directory+"/"+file,",",dst+destpath+'/'+file,")"
+                try:
+                    Copy(src_uri,dst_uri,yabiusername=yabiusername,priority=priority)
+                    file_count += 1
+                except CopyError, ce:
+                    print "RCOPY: Continuing after failed copy %s => %s : %s"%(src_uri,dst_uri,str(ce))
+                Sleep(0.1)
+
+        result_channel.callback(
+                                        http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, 
+                                        "%d files %d folders copied successfuly\n"%(file_count, folder_count) )
+                    )
+    except BlockingException, be:
+        print traceback.format_exc()
+        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+    except GETFailure, gf:
+        print traceback.format_exc()
+        if "503" in gf.message[1]:
+            result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+        else:
+            result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+    except Exception, e:
+        print traceback.format_exc()
+        result_channel.callback(
+                                        http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))
+                    )
+        return
+
+
+def OldRCopy(src, dst, log_callback=None, **kwargs):
     #print "RCopying %s to %s"%(src,dst)
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
@@ -283,7 +455,7 @@ def Mkdir(path, **kwargs):
     #return GET(MKDIR_PATH,uri=path, **kwargs)
 
 def Rm(path, recurse=False, **kwargs):
-    from BaseResource import base
+    from yabibe.server.resources.BaseResource import base
     if 'priority' not in kwargs:
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
 

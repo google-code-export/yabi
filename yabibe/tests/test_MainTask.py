@@ -192,16 +192,18 @@ class MainTaskTestSuite(unittest.TestCase):
                 "dst": "localfs://localhost%s"%dpath,
                 "order": 0
             } ],
-            "stageout":"localfs://localhost/tmp",
+            "stageout":"localfs://localhost/tmp/test-yabi-job-output/",
             "stageout_method":"copy",
             "yabiusername":tc['username'],
             "exec":
             {
-                "submission":"blah",
+                "submission":"cd ${working}\n${command} 1>${stdout} 2>${stderr}",
                 "backend":"localex://localhost/",
-                "command":"command",
-                "fsbackend":"localfs://localhost/tmp/",
-                "workingdir":"/tmp"
+                "command":"hostname",
+                "fsbackend":"localfs://localhost/tmp/test-yabi-working-directory",
+                # TODO: the trailing output directory here shouldnt be passed in by yabiadmin
+                # we created the 'output' so we should know about it and append it to the URI
+                "workingdir":"/tmp/test-yabi-working-directory/output"
             }
         }
 
@@ -217,8 +219,6 @@ class MainTaskTestSuite(unittest.TestCase):
                 result = task.main()
                 debug("ran",result)
                 
-                while reactor._callqueue:
-                    gevent.sleep(1.0)
             finally:
                 self.reactor_stop()
 
