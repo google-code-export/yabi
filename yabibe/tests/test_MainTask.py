@@ -94,7 +94,7 @@ class MainTaskTestSuite(unittest.TestCase):
             pass
         reactor.greenlet = gevent.getcurrent()
         while self._run:
-            reactor.doInner()
+            reactor.doInner(short_delay=1)         # short delay stops the long pause post cleanup for testing
         self._run = False
 
     def reactor_stop(self):
@@ -161,9 +161,6 @@ class MainTaskTestSuite(unittest.TestCase):
         # our config
         tc = TestConfig()
 
-        # make server
-        debug('starting server')
-
         # our users creds for json encoding
         creds = {
             'name':'localfs backend',
@@ -180,8 +177,7 @@ class MainTaskTestSuite(unittest.TestCase):
             ('/ws/credential/exec/testuser/','uri=localex%3A//localhost/'):('text/json',json.dumps(creds))
         }
         server = make_server(services)
-        debug('started',server)
-
+        
         job_data = {
             "taskid": "task-101",
             "statusurl":"http://localhost:80/",
@@ -211,20 +207,28 @@ class MainTaskTestSuite(unittest.TestCase):
         
         task = MainTask()
         task.load_json(jobjson)
-        debug(1)
-
+        
         def threadlet():
             try:
-                debug("running",task,task.main)
                 result = task.main()
-                debug("ran",result)
-                
+
+                self.assertIsNone(result)
+
+                # check stdout and stderr are there
+                self.assertTrue(os.path.exists("/tmp/test-yabi-job-output/STDOUT.txt"))
+                self.assertTrue(os.path.exists("/tmp/test-yabi-job-output/STDERR.txt"))
+
+                with open("/tmp/test-yabi-job-output/STDOUT.txt") as fh:
+                    from socket import gethostname
+                    self.assertEquals(fh.read().strip(), gethostname())
+
             finally:
                 self.reactor_stop()
-
+                server.stop()
+            
         thread = gevent.spawn(threadlet)
         self.reactor_run(thread)
-
+        
 
     USER_CERT =  {'user':os.environ.get("TESTUSER","dummyuser"),
                    'username':os.environ.get('USER','dummyusername'),
