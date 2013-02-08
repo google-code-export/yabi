@@ -10,7 +10,7 @@ if DEBUG:
         sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
 else:
     def debug(*args, **kwargs):
-        pass
+        pass 
 
 def application_builder(services):
     def application(environ, start_response):
