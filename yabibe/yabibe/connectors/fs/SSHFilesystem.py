@@ -27,9 +27,14 @@ SCHEMA = "scp"
 
 DEBUG = False
 
-def debug(*args, **kwargs):
-    if DEBUG:
-        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+if DEBUG:
+    def debug(*args, **kwargs):
+        if DEBUG:
+            sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
+
 
 MAX_SSH_CONNECTIONS = 15                                     # zero is unlimited
     
@@ -118,10 +123,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 else:
                     raise SSHSoftError(err)
         
-        if DEBUG:
-            print "mkdir_data=",out
-            print "err", err
-
+        debug("mkdir_data=",out,"err",err)
         return out
         
     #@lock
@@ -158,10 +160,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 else:
                     raise SSHSoftError(err)
         
-        if DEBUG:
-            print "rm_data=",out
-            print "err", err
-
+        debug( "rm_data=",out,"err",err)
         return out
     
     #@lock
@@ -235,10 +234,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 else:
                     raise SSHSoftError(err)
         
-        if DEBUG:
-            print "ln_data=",out
-            print "ln_err", err
-        
+        debug("ln_data=",out,"ln_err", err)        
         return out
         
     #@retry(5,(InvalidPath,PermissionDenied, SSHHardError))
@@ -247,6 +243,10 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         creds = self.Creds(yabiusername, creds, dst)
         pp = self.execute_and_wait( creds, self.shell.cp, host, src, dst, args="-r" if recurse else None, port=port )
         err, out = pp.err, pp.out
+
+        debug('err',err)
+        debug('out',out)
+        debug('exitcode',pp.exitcode)
         
         if pp.exitcode!=0:
             # error occurred
@@ -267,10 +267,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
                 else:
                     raise SSHSoftError(err)
         
-        if DEBUG:
-            print "cp_data=",out
-            print "cp_err", err
-
+        debug("cp_data=",out,"cp_err", err)
         return out
         
     #@lock
@@ -284,8 +281,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         when everything is setup and ready, deferred will be called with (proc, fifo), with proc being the python subprocess Popen object
         and fifo being the filesystem location of the fifo.
         """
-        if DEBUG:
-            print "SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")"
+        debug("SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
@@ -307,8 +303,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         when everything is setup and ready, deferred will be called with (proc, fifo), with proc being the python subprocess Popen object
         and fifo being the filesystem location of the fifo.
         """
-        if DEBUG:
-            print "SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
+        debug("SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
@@ -321,8 +316,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
             
     def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
-        if DEBUG:
-            print "SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
+        debug("SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
@@ -335,8 +329,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         
     def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
-        if DEBUG:
-            print "SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")"
+        debug("SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         debug(dst)
         creds = self.Creds(yabiusername, creds, dst)

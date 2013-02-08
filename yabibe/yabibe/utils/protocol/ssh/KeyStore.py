@@ -22,8 +22,8 @@ class KeyStore(object):
         
     def clear_keystore(self):
         if self.directory:
-            assert os.path.exists(self.directory), "Can't clear keystore that doesn't exist on disk"
-            rm_rf(self.directory)
+            if os.path.exists(self.directory):
+                rm_rf(self.directory)
         
     def save_identity(self, identity, tag=None):
         

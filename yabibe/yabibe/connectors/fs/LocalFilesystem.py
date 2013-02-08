@@ -139,8 +139,8 @@ class LocalShell(object):
             
             
         reactor.spawnProcess(   pp,
-                                command[0],
-                                command,
+                                str(command[0]),
+                                [str(X) for X in command],
                                 env=subenv,
                                 path=self._make_path()
                             )

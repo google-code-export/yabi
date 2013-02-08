@@ -849,8 +849,8 @@ class SSHFilesystemTestSuite(unittest.TestCase):
         os.makedirs(spath)
         os.makedirs(dpath)
         
-        # we need to read this directory to copy it
-        os.chmod(spath,0755)
+        # we need to read this directory to copy it. Well deny that right
+        os.chmod(spath,0700)
 
         # stick a file in in
         self.createfile(os.path.join(spath,"dummy.dat"))

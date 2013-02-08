@@ -33,7 +33,11 @@ def make_server(services={}):
     keys of hash are (PATH_INFO,QUERY_STRING) tuple
     values are what you want returned as (mime_type, data)
     """
-    server = pywsgi.WSGIServer(('', 8080), application_builder(services) )
+    # silence log
+    import StringIO
+    logio = StringIO.StringIO()
+    
+    server = pywsgi.WSGIServer(('', 8080), application_builder(services), log=logio )
     server.start()
     return server
 

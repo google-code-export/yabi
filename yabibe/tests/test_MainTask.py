@@ -80,7 +80,7 @@ class MainTaskTestSuite(unittest.TestCase):
         self.task = MainTask()
     
     def tearDown(self):
-        pass
+        os.system("sudo rm -rf /tmp/certs")
             
     def test_construct(self):
         task = MainTask()
@@ -143,6 +143,9 @@ class MainTaskTestSuite(unittest.TestCase):
     @patch('yabibe.server.resources.TaskManager.TaskTools.Log',LogMock)             # our test log call
     @patch('yabibe.server.resources.TaskManager.TaskTools.Sleep',MagicMock())       # retry delays have no effect
     def test_main_task_run(self):
+        # a place to store certs
+        os.mkdir("/tmp/certs")
+        
         # load connectors
         base.LoadConnectors()
 
