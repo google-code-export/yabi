@@ -23,50 +23,6 @@ DEBUG = False
 # value = (src,dst,readprocproto_weakref, writeprocproto_weakref)
 copies_in_progress = {}
 
-class FileCopyProgressResource(resource.Resource):
-    @staticmethod
-    def _users_details(username):
-        stale_entries = []
-        response=[]
-        for src,dst,read,write in copies_in_progress[username]:
-            if read()==None and write()==None:
-                stale_entries.append((src,dst,read,write))
-            else:
-                response.append({"src":src, "dst":dst})
-                
-        # purge stale entries for this user if there are any
-        for tup in stale_entries:
-            copies_in_progress[key].remove(tup)
-        
-        return response
-        
-
-    @hmac_authenticated
-    def http_GET(self, request):
-        if 'yabiusername' in request.args:
-            yabiusername = request.args['yabiusername'][0]
-            if yabiusername not in copies_in_progress:
-                # requested user has no copies or user is bogus. Either way return nothing
-                return http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'json')}, json.dumps([])+"\n" )
-            else:
-                return http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'json')}, json.dumps(self._users_details(yabiusername))+"\n" )
-         
-        users = copies_in_progress.keys()
-        response = {}
-        keys_to_delete = []
-        for user in users:
-            response[str(user)] = self._users_details(user)
-            
-            if not len(copies_in_progress[user]):
-                keys_to_delete.append(user)
-            
-        # purge stale keys
-        for key in keys_to_delete:
-            del copies_in_progress[key]
-        
-        return http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'json')}, json.dumps(response)+"\n" )
-
-
 
 class FileCopyResource(resource.PostableResource):
     VERSION=0.1
