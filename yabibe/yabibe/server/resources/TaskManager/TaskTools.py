@@ -27,11 +27,14 @@ USER_AGENT = "YabiStackless/0.1"
 
 DEFAULT_TASK_PRIORITY = 100
 
-DEBUG = True
+DEBUG = False
 
-def debug(*args, **kwargs):
-    import sys
-    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+if DEBUG:
+    def debug(*args, **kwargs):
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
 
 def retry_delay_generator():
     """this is the delay generator for the pausing between retrying failed copy/lcopy/links"""
@@ -39,9 +42,6 @@ def retry_delay_generator():
     while True:
         yield delay
         delay *= 2.0        # double it
-
-def debug(*args, **kwargs):
-    sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
 
 def Sleep(seconds):
     """sleep tasklet for this many seconds. seconds is a float"""
@@ -66,12 +66,9 @@ def Copy(src, dst, retry=COPY_RETRY, log_callback=None, **kwargs):
 
         result, message, blocked = do_streaming_copy( src, dst, yabiusername=kwargs['yabiusername'] )
 
-        debug("result is",result)
-
         if result:
             # success
             log(message)
-            debug("log",message)
             return
 
         # fails
@@ -79,7 +76,6 @@ def Copy(src, dst, retry=COPY_RETRY, log_callback=None, **kwargs):
 
         # todo: handle blocked
         dly = delay_gen.next()
-        debug("sleeping",dly)
         Sleep(dly)                   
     
     raise CopyError(message)
@@ -206,38 +202,6 @@ def do_streaming_copy(src, dst, **kwargs):
         if fifo:
             os.unlink(fifo)
 
-
-def OldCopy(src,dst,retry=COPY_RETRY, log_callback=None, **kwargs):
-    """Copy src (url) to dst (url) using the fileservice"""
-    delay_gen = retry_delay_generator()
-    if DEBUG:
-        print "Copying %s to %s"%(src,dst)
-    if 'priority' not in kwargs:
-        kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
-    for num in range(retry):
-        if num and log_callback:
-            log_callback("Retrying copy call. Attempt #%d"%(num+1))
-        try:
-            code,message,data = GET(COPY_PATH,src=src,dst=dst, **kwargs)
-            if DEBUG:
-                print "code=",repr(code)
-            if int(code)==200:
-                # success!
-                return True
-            else:
-                #print "FAIL"
-                if log_callback:
-                    log_callback("Copy %s to %s failed with %d:%s"%(src,dst,code,message))
-                
-        except GETFailure, err:
-            print "Warning: copy failed with error:",err
-            if log_callback:
-                log_callback("Warning: copy failed with error: %s"%(err))
-            
-        Sleep(delay_gen.next())                   
-    
-    raise CopyError(data)
-
 def RCopy(src, dst, yabiusername,  copy_contents=False, log_callback=None, **kwargs):
     """
     if 'copy_contents' is set, then copy the contents of the source directory, not the directory itself (like going cp -r src/* dst/)
@@ -266,23 +230,6 @@ def RCopy(src, dst, yabiusername,  copy_contents=False, log_callback=None, **kwa
     try:
         writeproto, fifo = dbend.GetCompressedWriteFifo( dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername)
         readproto, fifo2 = sbend.GetCompressedReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername)
-
-        debug("FROM",src_path,"TO",dst_path)
-        os.system("ls -alF '%s' > /tmp/files.txt"%src_path)
-
-        # TODO: put following in finally clause
-            ## def fifo_cleanup(response):
-            ##     os.unlink(fifo)
-            ##     return response
-            ## result_channel.addCallback(fifo_cleanup)
-
-        ## except BlockingException, be:
-        ##     #sbend.unlock(locks[0])
-        ##     #if locks[1]:
-        ##         #dbend.unlock(locks[1])
-        ##     print traceback.format_exc()
-        ##     result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
-        ##     return
         
         debug("READ:",readproto,fifo2)
         debug("WRITE:",writeproto,fifo)
@@ -313,7 +260,6 @@ def RCopy(src, dst, yabiusername,  copy_contents=False, log_callback=None, **kwa
                     gevent.sleep()
 
         if readproto.exitcode==0 and writeproto.exitcode==0:
-            debug("Copy finished exit codes 0")
             debug("readproto:")
             debug("ERR:",readproto.err)
             debug("OUT:",readproto.out)
@@ -329,107 +275,94 @@ def RCopy(src, dst, yabiusername,  copy_contents=False, log_callback=None, **kwa
             msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
             return False, msg
 
-    except NotImplemented, ni:    
-        ##
-        ## Fallback to old manual rcopy
-        ##
-        print "NO FALLBACK", ni
-        return
+    finally:
+        if fifo and os.path.exists(fifo):
+            os.unlink(fifo)
+        if fifo2 and os.path.exists(fifo2):
+            os.unline(fifo2)
 
-        # get a recursive listing of the source
-        try:
-            fsystem = List(path=src,recurse=True,yabiusername=yabiusername)
-        except BlockingException, be:
-            print traceback.format_exc()
-            result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+    #
+    # TODO: Reactivate the fallback. ATM its not needed as all the current backends support recursive copy
+    #
+    ## except NotImplemented, ni:    
+    ##     ##
+    ##     ## Fallback to old manual rcopy
+    ##     ##
+    ##     print "NO FALLBACK", ni
+    ##     return
 
-        # lets split the source path on separator
-        destination_dir_name = "" if copy_contents else ([X for X in src.split("/") if len(X)][-1]+'/')
+    ##     # get a recursive listing of the source
+    ##     try:
+    ##         fsystem = List(path=src,recurse=True,yabiusername=yabiusername)
+    ##     except BlockingException, be:
+    ##         print traceback.format_exc()
+    ##         result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
 
-        # remember the directories we make so we only make them once
-        created=[]
+    ##     # lets split the source path on separator
+    ##     destination_dir_name = "" if copy_contents else ([X for X in src.split("/") if len(X)][-1]+'/')
 
-        # count the files we copy
-        file_count = 0
-        folder_count = 0
+    ##     # remember the directories we make so we only make them once
+    ##     created=[]
 
-        for directory in sorted(fsystem.keys()):
-            # make directory
-            destpath = directory[len(src_path)+1:]              # the subpath part
-            if len(destpath) and destpath[-1]!='/':
-                destpath += '/'
-            #print "D:",dst,":",destpath,";",src_path
-            if dst+destination_dir_name+destpath not in created:
-                #print dst+destination_dir_name+destpath,"not in",created
-                try:
-                    Mkdir(dst+destination_dir_name+destpath,yabiusername=yabiusername)
-                    folder_count += 1
-                except BlockingException, be:
-                    print traceback.format_exc()
-                    result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )    
-                except GETFailure, gf:
-                    # ignore. directory probably already exists
-                    pass
-                created.append(dst+destination_dir_name+destpath)
+    ##     # count the files we copy
+    ##     file_count = 0
+    ##     folder_count = 0
 
-            for file,size,date,link in fsystem[directory]['files']:
-                if DEBUG:
-                    print "COPY",file,size,date
-                    print "EXTRA",">",destpath,">",directory
-                src_uri = src+destpath+file
-                dst_uri = dst+destination_dir_name+destpath+file
+    ##     for directory in sorted(fsystem.keys()):
+    ##         # make directory
+    ##         destpath = directory[len(src_path)+1:]              # the subpath part
+    ##         if len(destpath) and destpath[-1]!='/':
+    ##             destpath += '/'
+    ##         #print "D:",dst,":",destpath,";",src_path
+    ##         if dst+destination_dir_name+destpath not in created:
+    ##             #print dst+destination_dir_name+destpath,"not in",created
+    ##             try:
+    ##                 Mkdir(dst+destination_dir_name+destpath,yabiusername=yabiusername)
+    ##                 folder_count += 1
+    ##             except BlockingException, be:
+    ##                 print traceback.format_exc()
+    ##                 result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )    
+    ##             except GETFailure, gf:
+    ##                 # ignore. directory probably already exists
+    ##                 pass
+    ##             created.append(dst+destination_dir_name+destpath)
 
-                if DEBUG:
-                    print "Copy(",src_uri,",",dst_uri,")"
-                #print "Copy(",sbend+directory+"/"+file,",",dst+destpath+'/'+file,")"
-                try:
-                    Copy(src_uri,dst_uri,yabiusername=yabiusername,priority=priority)
-                    file_count += 1
-                except CopyError, ce:
-                    print "RCOPY: Continuing after failed copy %s => %s : %s"%(src_uri,dst_uri,str(ce))
-                Sleep(0.1)
+    ##         for file,size,date,link in fsystem[directory]['files']:
+    ##             if DEBUG:
+    ##                 print "COPY",file,size,date
+    ##                 print "EXTRA",">",destpath,">",directory
+    ##             src_uri = src+destpath+file
+    ##             dst_uri = dst+destination_dir_name+destpath+file
 
-        result_channel.callback(
-                                        http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, 
-                                        "%d files %d folders copied successfuly\n"%(file_count, folder_count) )
-                    )
-    except BlockingException, be:
-        print traceback.format_exc()
-        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
-    except GETFailure, gf:
-        print traceback.format_exc()
-        if "503" in gf.message[1]:
-            result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
-        else:
-            result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
-    except Exception, e:
-        print traceback.format_exc()
-        result_channel.callback(
-                                        http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))
-                    )
-        return
+    ##             if DEBUG:
+    ##                 print "Copy(",src_uri,",",dst_uri,")"
+    ##             #print "Copy(",sbend+directory+"/"+file,",",dst+destpath+'/'+file,")"
+    ##             try:
+    ##                 Copy(src_uri,dst_uri,yabiusername=yabiusername,priority=priority)
+    ##                 file_count += 1
+    ##             except CopyError, ce:
+    ##                 print "RCOPY: Continuing after failed copy %s => %s : %s"%(src_uri,dst_uri,str(ce))
+    ##             Sleep(0.1)
 
-
-def OldRCopy(src, dst, log_callback=None, **kwargs):
-    #print "RCopying %s to %s"%(src,dst)
-    if 'priority' not in kwargs:
-        kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
-
-    try:
-        #print "POSTING",RCOPY_PATH,src,dst,DEFAULT_TASK_PRIORITY,"kwargs:",kwargs
-        code, message, data = POST(RCOPY_PATH,src=src,dst=dst, **kwargs)
-        # success!
-        # the returned data line should contain a summary of the copying
-        assert code==200, "Success part of RCopy got non 200 return code"        
-                
-        # log the response if we've been asked to        
-        if log_callback:
-            log_callback( data )       
-        
-        return True
-    except GETFailure, err:
-        print "Warning: Copy failed with error:",err
-        raise
+    ##     result_channel.callback(
+    ##                                     http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, 
+    ##                                     "%d files %d folders copied successfuly\n"%(file_count, folder_count) )
+    ##                 )
+    ## except BlockingException, be:
+    ##     print traceback.format_exc()
+    ##     result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+    ## except GETFailure, gf:
+    ##     print traceback.format_exc()
+    ##     if "503" in gf.message[1]:
+    ##         result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+    ##     else:
+    ##         result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+    ## except Exception, e:
+    ##     print traceback.format_exc()
+    ##     result_channel.callback(
+    ##                                     http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))
+    ##                 )
+    ##     return
     
 def List(path,recurse=False, **kwargs):
     if 'priority' not in kwargs:
@@ -437,12 +370,11 @@ def List(path,recurse=False, **kwargs):
 
     if recurse:
         kwargs['recurse']='true'
-    code, message, data = GET(LIST_PATH,uri=path, **kwargs)
-    #print "RESPONSE",code,message,data
-    assert code==200
-    #print "LIST:",data
-    return json.loads(data)
 
+    debug("Ls(",path,recurse,kwargs,")")
+
+    return base.fs.ls(path, recurse=recurse, **kwargs)
+    
 def Mkdir(path, **kwargs):
     from yabibe.server.resources.BaseResource import base                               # needs to be imported at runtime to ensure decoupling from import order
 
@@ -452,8 +384,7 @@ def Mkdir(path, **kwargs):
         kwargs['priority']=str(DEFAULT_TASK_PRIORITY)
 
     return base.fs.mkdir(path, **kwargs)
-    #return GET(MKDIR_PATH,uri=path, **kwargs)
-
+    
 def Rm(path, recurse=False, **kwargs):
     from yabibe.server.resources.BaseResource import base
     if 'priority' not in kwargs:
@@ -586,20 +517,26 @@ def Exec( uri, yabiusername, working, submission, submission_data, state_cb, job
 
     result = bend.run( yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
     debug("bend.run result:",result)
-    
-def ExecOld(backend, command, callbackfunc=None, **kwargs):
-    if DEBUG:
-        print "EXEC:",backend,"command:",command,"kwargs:",kwargs
-   
-    kwargs['uri']=backend
-    POST(EXEC_PATH, command=command, datacallback=callbackfunc, **kwargs )
 
-def Resume(jobid, backend, command, callbackfunc=None, **kwargs):
-    if DEBUG:
-        print "RESUME:",backend,"jobid:",jobid,"command:",command,"kwargs:",kwargs
-    
-    kwargs['uri']=backend
-    POST(RESUME_PATH, jobid=jobid, command=command, datacallback=callbackfunc, **kwargs )
+def Resume( uri, yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
+    #uri, submission_script, submission_vars, yabiusername, working, status, taskid):
+    """execute a job on a backend"""
+    scheme, address = parse_url(uri)
+    username = address.username
+    path = address.path
+    hostname = address.hostname
+    basepath, filename = os.path.split(path)
+
+    # find which backend
+    from yabibe.server.resources.BaseResource import base
+    bend = base.ex.GetBackend(scheme)
+
+    debug( "Backend:", bend )
+
+    debug(submission_data)
+
+    result = bend.resume( yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
+    debug("bend.run result:",result)
     
 def UserCreds(yabiusername, uri, credtype="fs"):
     """Get a users credentials"""

@@ -11,7 +11,7 @@ ENV_CHECK = []
 # the schema we will be registered under. ie. schema://username@hostname:port/path/
 SCHEMA = "localex"
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     import sys

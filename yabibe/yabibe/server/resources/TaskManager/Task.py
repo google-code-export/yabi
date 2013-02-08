@@ -10,7 +10,7 @@ from yabibe.utils.parsers import parse_url
 import traceback
 from yabibe.exceptions import BlockingException
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     def debug(*args, **kwargs):
@@ -187,8 +187,7 @@ class NullBackendTask(Task):
 
         stageout = self.json['stageout']
         
-        if DEBUG:
-            print "STAGEOUT:",stageout
+        debug("STAGEOUT:",stageout)
         try:
             Mkdir(stageout, yabiusername=self.yabiusername)
         except GETFailure, error:
@@ -219,12 +218,9 @@ class NullBackendTask(Task):
             
             directory, file = os.path.split(address.path)
             remotedir = scheme+"://"+address.netloc+directory
-            if DEBUG:
-                print "CHECKING remote:",remotedir
             try:
                 listing = List(remotedir, yabiusername=self.yabiusername)
-                if DEBUG:
-                    print "list result:", listing
+                debug( "list result:", listing )
             except Exception, error:
                 # directory does not exist
                 # make dir
@@ -289,7 +285,6 @@ class MainTask(Task):
     CLEANUP = 4
     
     def __init__(self, json=None):
-        debug("!")
         Task.__init__(self,json)
         
         # for resuming started backend execution jobs
@@ -305,16 +300,14 @@ class MainTask(Task):
         assert scheme.lower() != "null"
            
     def main(self):
-        debug("main")
         if self.stage == self.STAGEIN:
-            self.status("===stagein===")
+            self.status("stagein")
             self.stage_in_files()
                 
             self._next_stage()
                 
         if self.stage == self.MKDIR:
             # make our working directory
-            debug('===mkdir===')
             self.status("mkdir")
             self.outuri, self.outdir = self.mkdir()                     # make the directories we are working in
         
@@ -322,7 +315,6 @@ class MainTask(Task):
         
         if self.stage == self.EXEC:
             # now we are going to run the job
-            debug('===exec===')
             self.status("exec")
             try:
                 if self._jobid is None:
@@ -344,7 +336,6 @@ class MainTask(Task):
  
         if self.stage == self.STAGEOUT:
             # stageout
-            debug('===stageout===')
             self.log("Staging out results")
             self.status('stageout')
         
@@ -353,17 +344,14 @@ class MainTask(Task):
         
             # make sure we have the stageout directory
             self.log("making stageout directory %s"%self.json['stageout'])
-            debug('===make_stageout===')
             self.make_stageout()
 
-            debug("===stageout()====")
             self.stageout(self.outuri)
         
             self._next_stage()
             
         if self.stage == self.CLEANUP:
-            debug('===cleanup===')
-        
+            
             # cleanup
             self.status("cleaning")
             self.log("Cleaning up job...")
@@ -393,12 +381,10 @@ class MainTask(Task):
             
             directory, file = os.path.split(address.path)
             remotedir = scheme+"://"+address.netloc+directory
-            if DEBUG:
-                print "CHECKING remote:",remotedir
+            debug( "CHECKING remote:",remotedir )
             try:
                 listing = List(remotedir, yabiusername=self.yabiusername)
-                if DEBUG:
-                    print "list result:", listing
+                debug( "list result:", listing )
             except Exception, error:
                 # directory does not exist
                 #make dir
@@ -488,8 +474,7 @@ class MainTask(Task):
 
         stageout = self.json['stageout']
         
-        if DEBUG:
-            print "STAGEOUT:",stageout
+        debug( "STAGEOUT:",stageout )
         try:
             Mkdir(stageout, yabiusername=self.yabiusername)
         except GETFailure, error:
@@ -510,17 +495,16 @@ class MainTask(Task):
                 # callback for job execution status change messages
                 def _task_status_change(line):
                     """Each line that comes back from the webservice gets passed into this callback"""
-                    debug("_task_status_change(",line,")")
+                    debug("status change:",line)
                     line = line.strip()
                     self.log("Remote execution backend sent status message: %s"%(line))
                     status = line.lower()
-                    debug("exec_status was:",self.exec_status)
                     self.exec_status.append(status)
-                    debug("now",self.exec_status)
                     self.status("exec:%s"%(status))
                     
                 def _task_id_change(value):
                     # check for job id number
+                    debug("task id:",value)
                     self._jobid = value
                 
                 # submit the job to the execution middle ware
@@ -546,14 +530,8 @@ class MainTask(Task):
 
                     debug("WORKING DIR:",task['exec']['workingdir'])
                     
-                    #print "callfunc is",callfunc
-                    #callfunc(uri, command=task['exec']['command'], remote_info=task['remoteinfourl'], submission=self.submission, stdout="STDOUT.txt",stderr="STDERR.txt", callbackfunc=_task_status_change, yabiusername=self.yabiusername, **extras)     # this blocks untill the command is complete. or the execution errored
                     debug(callfunc,"(",uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change,")")
-                    #callfunc(uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change)
-                    debug("----")
-                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, debug, debug )     #self.log, self.log )
-
-                    # this now blocks until its success or failure
+                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )                 # this now blocks until its success or failure
                     
                     if filter(lambda s: 'error' in s, self.exec_status):
                         print "TASK[%s]: Execution failed!"%(self.taskid)
@@ -563,7 +541,6 @@ class MainTask(Task):
                         # finish task
                         raise TaskFailed("Execution failed")
                     else:
-                        debug("FINISHED")
                         self.log("Execution finished")
                 except GETFailure, error:
                     if "503" in error.message[1]:

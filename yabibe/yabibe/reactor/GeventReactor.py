@@ -310,7 +310,7 @@ class GeventReactor(posixbase.PosixReactorBase):
         log.msg('Main loop terminated.')
         self.fireSystemEvent('shutdown')
 
-    def doInner(self):          
+    def doInner(self, short_delay=None):          
         self._wait = 0
         now = self.seconds()
         if len(self._callqueue) > 0:
@@ -321,35 +321,28 @@ class GeventReactor(posixbase.PosixReactorBase):
             delay = 1
         try:
             self._wait = 1
-            #sys.stderr.write("!(%d)"%delay)
+            if short_delay:
+                delay=short_delay
             gevent.sleep(max(0,delay))
             self._wait = 0
         except Reschedule:
             return
         now = self.seconds()
         while 1:
-            #debug("loop",self._callqueue)
             try:
                 c = self._callqueue[0]
             except IndexError:
-                #debug(IndexError)
                 break
             if c.time <= now:
-                #debug("inside")
                 del self._callqueue[0]
                 try:
-                    #debug("call",c)
                     c()
-                    #debug("called")
                 except GreenletExit:
-                    #debug("GreenletExit")
                     raise
                 except:
-                    #debug('Unexpected error in main loop.')
                     log.msg('Unexpected error in main loop.')
                     log.err()
             else:
-                #debug(c.time, now)
                 break
  
     def addReader(self,selectable):

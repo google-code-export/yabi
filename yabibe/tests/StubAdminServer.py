@@ -3,14 +3,17 @@
 import sys
 from gevent import pywsgi
 
-def debug(*args, **kwargs):
-    sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
+DEBUG = False
+
+if DEBUG:
+    def debug(*args, **kwargs):
+        sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
+else:
+    def debug(*args, **kwargs):
+        pass
 
 def application_builder(services):
     def application(environ, start_response):
-        debug("environ",environ)
-        debug("start_response",start_response)
-
         PATH_INFO = environ.get('PATH_INFO','/')
         QUERY_STRING = environ.get('QUERY_STRING','')
 
