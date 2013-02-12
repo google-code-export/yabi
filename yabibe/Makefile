@@ -6,8 +6,8 @@ tests: test
 
 vtests: vtest
 
-test:
-	nosetests ./tests/*.py
+test: vptest
+	vptest/bin/nosetests ./tests/*.py
 
 vtest:
 	nosetests -v ./tests/*.py
@@ -26,3 +26,8 @@ build:
 
 install:
 	python setup.py install
+
+vptest:
+	#build a virtual pyhton for running tests
+	virtualenv vptest
+	vptest/bin/pip install -r test-requirements.txt
