@@ -14,13 +14,11 @@ class RewalkTest(YabiTestCase, FileUtils):
     '''
     TIMEOUT = 60.0 * 20.0
     
-    @classmethod
     def setUpAdmin(self):
         from yabiadmin.yabi import models
         admin.create_tool_cksum()
         admin.create_tool_dd()
 
-    @classmethod
     def tearDownAdmin(self):
         from yabiadmin.yabi import models
         models.Tool.objects.get(name='cksum').delete()
@@ -29,14 +27,16 @@ class RewalkTest(YabiTestCase, FileUtils):
     def setUp(self):
         YabiTestCase.setUp(self)
         FileUtils.setUp(self)
+        self.setUpAdmin()
 
     def tearDown(self):
+        self.tearDownAdmin()
         YabiTestCase.tearDown(self)
         FileUtils.tearDown(self)
 
     def get_localfs_dir(self):
         LOCALFS_PREFIX = 'localfs://demo@localhost'
-        result = self.yabi.run('ls')
+        result = self.yabi.run(['ls'])
         assert result.status == 0, "yabi ls returned an error"
         localfs_line = None
         for line in result.stdout.split(os.linesep):
@@ -76,9 +76,9 @@ class RewalkTest(YabiTestCase, FileUtils):
         self.prepare_json(wfl_json_file, changed_json_file, {
             'DIR': localfs_dir, 'FILENAME': os.path.basename(filename)})
         
-        result = self.yabi.run('submitworkflow %s' % changed_json_file)
+        result = self.yabi.run(['submitworkflow', changed_json_file])
         wfl_id = result.id
-        result = StatusResult(self.yabi.run('status %s' % wfl_id))
+        result = StatusResult(self.yabi.run(['status', wfl_id]))
         self.assertEqual(result.workflow.status, 'complete')
         self.assertTrue(all_items(lambda j: j.status == 'complete', result.workflow.jobs))
 

@@ -26,7 +26,7 @@ setup(name='yabiadmin',
     #package_data=data_files,
     package_data={
         '': [ "%s/%s"%(dirglob,fileglob)
-            for dirglob in (["."] + [ '/'.join(['*']*num) for num in range(1,10) ])                         # yui is deeply nested
+            for dirglob in (["."] + [ '/'.join(['*']*num) for num in range(1,15) ])                         # yui is deeply nested
             for fileglob in [ '*.mako', '*.html', '*.css', '*.js', '*.png', '*.jpg', 'favicon.ico', '*.gif', 'mime.types', '*.wsgi', '*.svg' ]
         ]
     },
@@ -73,5 +73,6 @@ setup(name='yabiadmin',
         'djamboloader==0.1.2',
         'MarkupSafe==0.15',
         'wsgiref==0.1.2',
+        'gunicorn'
     ],
 )

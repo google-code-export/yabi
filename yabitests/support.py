@@ -3,23 +3,18 @@ import config
 import unittest
 from collections import namedtuple
 
-DEBUG = False
-CONFIG_SECTION= os.environ.get('TEST_CONFIG_SECTION','quickstart_tests')
-YABI_DIR = os.environ.get('YABI_DIR', '..')
-JSON_DIR = os.path.join(os.getcwd(), 'json_workflows')
-TMP_DIR = os.environ.get('YABI_DIR', None)                 # None means system default (/tmp on unix)
-YABI_FE = "http://localhost.localdomain:8000"
-YABI_BE = "http://localhost.localdomain:9001"
-TEST_USERNAME = "demo"
-TEST_PASSWORD = "demo"
-
-DEFAULT_TIMEOUT = 60.0 * 10.0                           # 10 minutes. This is how long some of the tests take. this is WAY TOO LONG.
+DEBUG = True
+CONFIG_SECTION = os.environ.get('YABI_CONFIG')
+if CONFIG_SECTION:
+    conf = config.Configuration(section=CONFIG_SECTION)
+else:
+    conf = config.Configuration()
 
 def yabipath(relpath):
-    return os.path.join(YABI_DIR, relpath)
+    return os.path.join(conf.yabidir, relpath)
 
 def json_path(name):
-    return os.path.join(JSON_DIR, name + '.json')
+    return os.path.join(conf.jsondir, name + '.json')
 
 def all_items(fn, items):
     for i in items:
@@ -36,9 +31,7 @@ class Result(object):
         self._id = None
 
         if DEBUG:
-            print self.status
-            print self.stdout
-            print self.stderr
+            print "Result (%s)(%s)(%s)"%(self.status, self.stdout, self.stderr)
 
     @property
     def id(self):
@@ -52,18 +45,16 @@ class Result(object):
         return self._id
 
     def cleanup(self):
-        result = self.yabi.run('rm "%s"' % self.stageout_dir)
+        result = self.yabi.run(['rm', self.stageout_dir])
         if result.status != 0:
-            print result.status
-            print result.stdout
-            print result.stderr
+            print "Result (%s)(%s)(%s)"%(result.status, result.stdout, result.stderr)
 
 class StatusResult(Result):
     '''Decorates a normal Result with methods to access Worflow properties from yabish status output'''
-    WORKFLOW_PROPERTIES = ['id', 'status', 'name', 'stageout', 'jobs']
+    WORKFLOW_PROPERTIES = ['id', 'status', 'name', 'stageout', 'jobs', 'tags', 'created_on', 'last_modified_on']
     Workflow = namedtuple('Workflow', WORKFLOW_PROPERTIES)
     Job = namedtuple('Job', ['id', 'status', 'toolname'])
-    
+
     def __init__(self, result):
         self.result = result
         self.status = self.result.status
@@ -72,20 +63,21 @@ class StatusResult(Result):
         self.yabi = self.result.yabi
 
         self.workflow = self.create_workflow_from_stdout()
-        
+
     def extract_jobs(self, jobs_text):
         jobs_text = jobs_text.split("\n")[3:] # skip header and separator
         jobs = []
         for line in filter(lambda l: l.strip(), jobs_text):
             jobs.append(StatusResult.Job(*line.split()))
-        return jobs    
+        return jobs
 
     def extract_workflow_properties(self, wfl_text):
         props = dict.fromkeys(StatusResult.WORKFLOW_PROPERTIES)
         for line in filter(lambda l: l.strip(), wfl_text.split("\n")):
+            if '=== STATUS ===' in line:
+                continue
             name, value = line.split(":", 1)
-            if name in StatusResult.WORKFLOW_PROPERTIES:
-                props[name] = value
+            props[name] = value
         return props
 
     def create_workflow_from_stdout(self):
@@ -95,6 +87,7 @@ class StatusResult(Result):
         jobs = self.extract_jobs(jobs_text)
         workflow_props = self.extract_workflow_properties(wfl_text)
         workflow_props['jobs'] = jobs
+        print workflow_props
         workflow = StatusResult.Workflow(**workflow_props)
         return workflow
 
@@ -110,79 +103,67 @@ class YabiTimeoutException(Exception):
     pass
 
 class Yabi(object):
-    TIMEOUT = DEFAULT_TIMEOUT
-    
-    def __init__(self, yabish=yabipath('yabish/yabish')):
-        self.conf = config.Configuration(section=CONFIG_SECTION)
+    TIMEOUT = conf.timeout
 
-        self.command = yabish + ' '
-        if self.conf.yabiurl:
-            self.command += '--yabi-url="%s"' % self.conf.yabiurl
+    def __init__(self):
+        yabish = yabipath(conf.yabish) 
+
+        self.command = [yabish] 
+        if conf.yabiurl:
+            self.command.append('--yabi-url=%s' % conf.yabiurl)
         self.setup_data_dir()
 
     def set_timeout(self, timeout):
         self.TIMEOUT = timeout
 
     def setup_data_dir(self):
-
-        # use data dir passed in from Hudson etc otherwise the one from conf
-        if not os.environ.get('TEST_DATA_DIR'):
-            self.test_data_dir = self.conf.test_data_dir
-        else:
-            self.test_data_dir = os.environ.get('TEST_DATA_DIR')
+        self.test_data_dir = conf.testdatadir
 
         if not os.path.exists(self.test_data_dir):
             assert False, "Test data directory does not exist: %s" % self.test_data_dir
 
-    def run(self, args='', timeout=None):
+    def run(self, args=[], timeout=None):
         timeout = timeout or self.TIMEOUT
-        command = self.command + ' ' + args
-        prefix = '. %s && ' % yabipath('yabish/virt_yabish/bin/activate')
+        args = self.command + args
         starttime = time.time()
-        cmd = subprocess.Popen(prefix + command, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        if DEBUG:
+            print args
+        cmd = subprocess.Popen(args, shell=False, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         status = None
         while status==None:
             status = cmd.poll()
             time.sleep(1.0)
-            
+
             if time.time()-starttime > timeout:
                 raise YabiTimeoutException()
-        
+
         return Result(status, cmd.stdout.read(), cmd.stderr.read(), runner=self)
 
-    def login(self, username=None, password=None):
-        if not username:
-            username = self.conf.username
-        if not password:
-            password = self.conf.password
-        result = self.run('login %s %s' % (username, password))
+    def login(self, username=conf.yabiusername, password=conf.yabipassword):
+        result = self.run(['login', username, password])
         return 'Login unsuccessful' not in result.stderr
 
     def logout(self):
-        result = self.run('logout')
+        result = self.run(['logout'])
 
     def purge(self):
-        result = self.run('purge')
+        result = self.run(['purge'])
 
-def run_yabiadmin_script(script, *args):
-    prefix = 'cd %s && ' % yabipath('yabiadmin/yabiadmin')
-    prefix += '. %s && ' % 'virt_yabiadmin/bin/activate'
-    command = 'python manage.py runscript %s --pythonpath ../.. --script-args="%s"' % (script, ','.join(args))
-    cmd = subprocess.Popen(prefix + command, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+def shell_command(command):
+    print command
+    cmd = subprocess.Popen(command, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
     status = cmd.wait()
     out = cmd.stdout.read()
     err = cmd.stdout.read()
+    print out
     if status != 0 or err:
-        print 'run_yabiadmin_script failed!'
-        print 'Command was: ' + prefix + command
+        print 'Command was: ' + command
         print 'STATUS was: %d' % status
         print 'STDERR was: \n' + err
-        print 'STDOUT was: \n' + out
-        raise StandardError('run_yabiadmin_script FAILED')
-
+        raise StandardError('shell_command failed (%s)'%command)
 
 class YabiTestCase(unittest.TestCase):
-    TIMEOUT = DEFAULT_TIMEOUT
+    TIMEOUT = conf.timeout
 
     runner = Yabi
 
@@ -190,25 +171,22 @@ class YabiTestCase(unittest.TestCase):
     def classname(self):
         return self.__module__ + '.' + self.__class__.__name__
 
-    def _setup_admin(self):
-        if 'setUpAdmin' in dir(self.__class__):
-            run_yabiadmin_script('run_class_method', self.classname, 'setUpAdmin')
-
-    def _teardown_admin(self):
-        if 'tearDownAdmin' in dir(self.__class__):
-            run_yabiadmin_script('run_class_method', self.classname, 'tearDownAdmin')
-
     def setUp(self):
+        shell_command(conf.stopyabi)
+        shell_command(conf.cleanyabi)
+        shell_command(conf.dbrebuild)
+        shell_command(conf.startyabi)
+        shell_command(conf.yabistatus)
         self.yabi = self.runner()
         self.yabi.set_timeout(self.TIMEOUT)
         self.yabi.login()
-        self._setup_admin()
 
     def tearDown(self):
         self.yabi.logout()
         self.yabi.purge()
-        self._teardown_admin()
-
+        shell_command(conf.stopyabi)
+        shell_command(conf.yabistatus)
+        shell_command(conf.cleanyabi)
 
 class FileUtils(object):
     def setUp(self):
@@ -221,7 +199,7 @@ class FileUtils(object):
             elif os.path.isfile(f):
                 os.unlink(f)
 
-    def create_tempfile(self, size = 1024, parentdir = TMP_DIR):
+    def create_tempfile(self, size = 1024, parentdir = conf.tmpdir):
         import tempfile
         import stat
         import random as rand
@@ -246,19 +224,19 @@ class FileUtils(object):
                     f.write(data(1024))
             f.write(data(remaining,random=True))
         filename = f.name
-        
+
         self.tempfiles.append(filename)
-        return filename       
+        return filename
 
     def create_tempdir(self):
         import tempfile
         dirname = tempfile.mkdtemp()
         self.tempfiles.append(dirname)
         return dirname
-      
+
     def delete_on_exit(self, filename):
         self.tempfiles.append(filename)
-  
+
     def run_cksum_locally(self, filename):
         import subprocess
         cmd = subprocess.Popen('cksum %s' % filename, shell=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
