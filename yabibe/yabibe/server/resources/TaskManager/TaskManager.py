@@ -15,7 +15,7 @@ from yabibe.utils.geventtools import sleep
 from yabibe.utils.parsers import parse_url
 
 
-from utils.RememberingHTTPClient import RememberingHTTPClientFactory
+from yabibe.utils.RememberingHTTPClient import RememberingHTTPClientFactory
 
 # if debug is on, full tracebacks are logged into yabiadmin
 DEBUG = False
