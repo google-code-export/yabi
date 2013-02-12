@@ -45,6 +45,8 @@ KNOWN_HOSTS_FILE = "~/.ssh/known_hosts"
 CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', False)
 CHECK_KNOWN_HOSTS = True
 
+DEBUG = False
+
 #disable any SSH agent that was lingering on the terminal when this is run
 if 'SSH_AUTH_SOCK' in os.environ:
     del os.environ['SSH_AUTH_SOCK']
@@ -58,8 +60,12 @@ SSL_CERT_CHECK = os.environ.get("SSL_CERT_CHECK","true").lower() == "true"
 assert 'HMAC' in os.environ
 hmac_key = os.environ['HMAC']
 
-def debug(*args,**kwargs):
-    sys.stderr.write("<"+(",".join([str(a) for a in args]))+(",".join(["%s=>%s"%(k,v) for k,v in kwargs.iteritems()]))+">")
+if DEBUG:
+    def debug(*args,**kwargs):
+        sys.stderr.write("<"+(",".join([str(a) for a in args]))+(",".join(["%s=>%s"%(k,v) for k,v in kwargs.iteritems()]))+">")
+else:
+    def debug(*args,**kwargs):
+        pass
 
 def main():
     options, arguments = parse_args()
