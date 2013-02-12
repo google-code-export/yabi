@@ -3,7 +3,7 @@ from twistedweb2 import resource, http_headers, responsecode, http
 
 from FileCompressGetResource import FileCompressGetResource
 from FileCompressPutResource import FileCompressPutResource
-from FileCopyResource import FileCopyResource, FileCopyProgressResource
+from FileCopyResource import FileCopyResource
 from FileDeleteResource import FileDeleteResource
 from FileGetResource import FileGetResource
 from FileLCopyResource import FileLCopyResource
