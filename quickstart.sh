@@ -1,116 +1,169 @@
-#!/bin/bash
+#!/bin/sh
 #
-# Quickstart script to setup yabi with a simple sqlite database
+# Script to control Yabi for quickstart
 #
 
 # break on error
 set -e 
 
-# additional URLs to search for eggs during install
-EASY_INSTALL_INDEX="https://s3-ap-southeast-2.amazonaws.com/http-syd/python/centos/6/noarch/index.html"
-
-# Eggs for this installation of quickstart
+EASY_INSTALL="http://s3-ap-southeast-2.amazonaws.com/http-syd/python/centos/6/noarch/index.html"
 YABI_ADMIN_EGG="yabiadmin==0.2"
 YABI_BE_EGG="yabibe==0.2"
 
-# handle the stop instruction to tear down the quickstart environment
-if [ "x$1" == "xstop" ]
-then
-    echo "Stopping quickstart servers"
-    set +e
-    killall gunicorn_django
-    killall celeryd
-    kill `cat yabibe-quickstart.pid` 
+ARGV="$@"
 
-    # delay to allow file handles to free
-    sleep 3
+function stopyabiadmin() {
+    if test -e yabiadmin-quickstart.pid; then
+        echo "Stopping yabiadmin"
+        kill `cat yabiadmin-quickstart.pid`
+        return
+    fi
+    echo "no pid file for yabiadmin"
+}
 
-    exit 0
-fi
+function stopceleryd() {
+    if test -e celeryd-quickstart.pid; then
+        echo "Stopping celeryd"
+        kill `cat celeryd-quickstart.pid`
+        return
+    fi
+    echo "no pid file for celeryd"
+}
 
-# start backend, celery and frontend
-if [ "x$1" == "xstart" ]
-then
+function stopyabibe() {
+    if test -e yabibe-quickstart.pid; then
+        echo "Stopping yabibe"
+        kill `cat yabibe-quickstart.pid`
+        sleep 3
+        return
+    fi
+    echo "no pid file for yabibe"
+}
 
-    echo "Launch yabiadmin (frontend) http://localhost:8000"
-    virt_quickstart_yabiadmin/bin/gunicorn_django -b 0.0.0.0:8000 --log-file=yabiadmin-quickstart.log --daemon yabiadmin.quickstartsettings -t 300 -w 5
+function stop() {
+    stopyabiadmin
+    stopceleryd
+    stopyabibe
+}
+
+function install() {
+    # check requirements
+    which virtualenv >/dev/null
+
+    export PYTHONPATH=`pwd`
+
+    echo "Install yabiadmin"
+    virtualenv --system-site-packages virt_quickstart
+    virt_quickstart/bin/easy_install -f $EASY_INSTALL $YABI_ADMIN_EGG
+
+    echo "Install yabibe"
+    virt_quickstart/bin/easy_install -f $EASY_INSTALL $YABI_BE_EGG
+}
+
+function startyabiadmin() {
+    if test -e yabiadmin-quickstart.pid; then
+        echo "pid file exists for yabiadmin"
+        return
+    fi
+
+    echo "Launch yabiadmin (frontend) http://localhost:8080"
+    mkdir -p ~/yabi_data_dir
+    export DJANGO_SETTINGS_MODULE="yabiadmin.quickstartsettings"
+    virt_quickstart/bin/django-admin.py syncdb --noinput --settings=yabiadmin.quickstartsettings 1> syncdb-quickstart.log
+    virt_quickstart/bin/django-admin.py migrate --settings=yabiadmin.quickstartsettings 1> migrate-quickstart.log
+    virt_quickstart/bin/django-admin.py collectstatic --noinput --settings=yabiadmin.quickstartsettings 1> collectstatic-quickstart.log
+    virt_quickstart/bin/gunicorn_django -b 0.0.0.0:8080 --pid=yabiadmin-quickstart.pid --log-file=yabiadmin-quickstart.log --daemon --settings=yabiadmin.quickstartsettings -t 300 -w 5
+}
+
+function startceleryd() {
+    if test -e celeryd-quickstart.pid; then
+        echo "pid file exists for celeryd"
+        return
+    fi
 
     echo "Launch celeryd (message queue)"
     CELERY_CONFIG_MODULE="quickstartsettings"
     CELERYD_CHDIR=`pwd`
     CELERYD_OPTS="--logfile=celeryd-quickstart.log --pidfile=celeryd-quickstart.pid"
     CELERY_LOADER="django"
-    PYTHONPATH=$CELERYD_CHDIR
     DJANGO_SETTINGS_MODULE="yabiadmin.quickstartsettings"
     DJANGO_PROJECT_DIR="$CELERYD_CHDIR"
     PROJECT_DIRECTORY="$CELERYD_CHDIR"
-    export CELERY_CONFIG_MODULE DJANGO_SETTINGS_MODULE DJANGO_PROJECT_DIR CELERY_LOADER CELERY_CHDIR PYTHONPATH PROJECT_DIRECTORY CELERYD_CHDIR
-    virt_quickstart_yabiadmin/bin/celeryd $CELERYD_OPTS 1>/dev/null 2>/dev/null &
+    export CELERY_CONFIG_MODULE DJANGO_SETTINGS_MODULE DJANGO_PROJECT_DIR CELERY_LOADER CELERY_CHDIR PROJECT_DIRECTORY CELERYD_CHDIR
+    virt_quickstart/bin/celeryd $CELERYD_OPTS 1>/dev/null 2>/dev/null &
+}
+
+function startyabibe() {
+    if test -e yabibe-quickstart.pid; then
+        echo "pid file exists for yabibe"
+        return
+    fi
 
     echo "Launch yabibe (backend)"
-    mkdir -p /tmp/run/backend/certificates
-    mkdir -p /tmp/run/backend/fifos
-    mkdir -p /tmp/run/backend/tasklets
-    mkdir -p /tmp/run/backend/temp
-
-    # TODO pull from egg
+    mkdir -p /tmp/yabibe-quickstart/run/backend/certificates
+    mkdir -p /tmp/yabibe-quickstart/run/backend/fifos
+    mkdir -p /tmp/yabibe-quickstart/run/backend/tasklets
+    mkdir -p /tmp/yabibe-quickstart/run/backend/temp
     unset YABICONF
     export QUICKSTART="1" 
-    virt_quickstart_yabibe/bin/yabibe --pidfile=yabibe-quickstart.pid
+    virt_quickstart/bin/yabibe --pidfile=yabibe-quickstart.pid
+}
 
-    echo "To stop servers, run './quickstart stop'"
+function start() {
+    startyabiadmin
+    startceleryd
+    startyabibe
+}
 
-    exit 0
-fi
+function status() {
+    if test -e yabibe-quickstart.pid; then
+        ps -f -p `cat yabibe-quickstart.pid`
+    else 
+        echo "No pid file for yabibe"
+    fi
+    if test -e yabiadmin-quickstart.pid; then
+        ps -f -p `cat yabiadmin-quickstart.pid`
+    else 
+        echo "No pid file for yabiadmin"
+    fi
+    if test -e celeryd-quickstart.pid; then
+        ps -f -p `cat celeryd-quickstart.pid`
+    else 
+        echo "No pid file for celeryd"
+    fi
+}
 
-# install
-if [ "x$1" == "xinstall" ]
-then
-
-    # check requirements
-    which virtualenv >/dev/null
-
-    export PYTHONPATH=`pwd`
-
-    echo "Install yabiadmin ($YABI_ADMIN_EGG) from $EASY_INSTALL_INDEX"
-    virtualenv virt_quickstart_yabiadmin
-    virt_quickstart_yabiadmin/bin/easy_install -f $EASY_INSTALL_INDEX $YABI_ADMIN_EGG
-
-    # use gunicorn to fire up yabiadmin
-    virt_quickstart_yabiadmin/bin/pip install gunicorn
-
-    # database migrations
-    export DJANGO_SETTINGS_MODULE="yabiadmin.quickstartsettings"
-    virt_quickstart_yabiadmin/bin/django-admin.py syncdb --noinput
-    virt_quickstart_yabiadmin/bin/django-admin.py migrate
-
-    # collect static
-    virt_quickstart_yabiadmin/bin/django-admin.py collectstatic --noinput 1> collectstatic.log
-
-    echo "Install yabibe ($YABI_BE_EGG) from $EASY_INSTALL_INDEX"
-    virtualenv virt_quickstart_yabibe
-    virt_quickstart_yabibe/bin/easy_install -f $EASY_INSTALL_INDEX $YABI_BE_EGG
-
-    echo "To run servers, type './quickstart start'"
-
-    exit 0
-fi
-
-# clean
-if [ "x$1" == "xclean" ]
-then
-    echo "Removing YabiAdmin virtual python and SQLite database"
-    rm -rf virt_quickstart_yabiadmin
+function clean() {
+    echo "Removing Yabi virtual python and SQLite database"
+    rm -rf virt_quickstart
     rm -f yabiadmin_quickstart.sqlite3
 
-    echo "Removing YabiBe virtual python and /tmp/run"
-    rm -rf virt_quickstart_yabibe
-    rm -rf /tmp/run
+    echo "Removing /tmp/yabibe-quickstart"
+    rm -rf /tmp/yabibe-quickstart
 
     echo "Vitual python directories and SQLite database for quickstart removed."
-
-    exit 0
-fi
+}
 
 
-echo "Usage ./quickstart (install|clean|start|stop)"
+case $ARGV in
+stop)
+    stop
+    ;;
+start)
+    start
+    ;;
+status)
+    status
+    ;;
+install)
+    stop
+    install
+    ;;
+clean)
+    stop
+    clean
+    ;;
+*)
+    echo "Usage ./quickstart.sh (status|start|stop|install|clean)"
+esac
+
