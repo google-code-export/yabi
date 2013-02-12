@@ -10,11 +10,19 @@ from yabibe.conf import config
 from yabibe.server.resources.BaseResource import base
 from yabibe.utils import rm_rf
 
+ENV_YABICONF = 'YABICONF'
+
 def app():
     #sys.path.append(os.path.dirname(__file__))                  # add our base directory to the pythonpath
-    
+
     #read config
-    config.read_defaults()
+    if ENV_YABICONF in os.environ:
+        # config file is specified, so JUST read this
+        config.read_from_file(os.environ[ENV_YABICONF])
+    else:
+        # unspecified config file. read defaults, then overlay with what we find on search path
+        config.read_defaults()
+        config.read_config()
 
     # sanity check that temp directory is set
     assert config.config['backend'].has_key('temp'), "[backend] section of yabi.conf is missing 'temp' directory setting"
