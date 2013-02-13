@@ -21,7 +21,6 @@ setup(name='yabibe',
         'paramiko',
         'Mako',
         'MarkupSafe',
-        'Twisted',
         'TwistedWeb2==1.0.0',
         'setproctitle',
         'wsgiref',
@@ -34,6 +33,6 @@ setup(name='yabibe',
     ],
     dependency_links = [
           "http://repo.ccgapps.com.au",
-          "https://twisted-web2.googlecode.com/files/TwistedWeb2-1.0.0.tar.gz"
+          "https://twisted-web2.googlecode.com/files/TwistedWeb2-1.0.0.tar.gz?"    # see: http://stackoverflow.com/questions/2653410/project-hosting-on-google-code-files-are-cached
     ],      
 )
