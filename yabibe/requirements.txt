@@ -23,7 +23,7 @@ psutil
 gevent==0.13.8
 twisted==12.0.0
 pyOpenSSL==0.13
-https://twisted-web2.googlecode.com/files/TwistedWeb2-1.0.tar.gz
+https://twisted-web2.googlecode.com/files/TwistedWeb2-1.0.0.tar.gz
 setproctitle==1.1.2
 greenlet==0.4.0
 boto==2.3.0
