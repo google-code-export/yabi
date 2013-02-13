@@ -31,3 +31,7 @@ vptest:
 	#build a virtual pyhton for running tests
 	virtualenv vptest
 	vptest/bin/pip install -r test-requirements.txt
+
+clean-test:
+	# clean away the vptest directory so tests can be rebuilt from scratch
+	rm -rf vptest 
