@@ -34,4 +34,4 @@ vptest:
 
 clean-test:
 	# clean away the vptest directory so tests can be rebuilt from scratch
-	rm -rf vptest 
+	rm -rf vptest
