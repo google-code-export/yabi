@@ -11,7 +11,7 @@ from yabibe.exceptions import PermissionDenied, InvalidPath, IsADirectory
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh
-from yabibe.utils.TempFile import TempFile
+from yabibe.utils.TemporaryFile import TemporaryFile
 from yabibe.server.resources.TaskManager.TaskTools import UserCreds, uriify
 
 sshauth = ssh.SSHAuth.SSHAuth()
@@ -77,7 +77,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         then return the result"""
         # key login
         if 'key' in creds:
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 pp = callable(tf.filename, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
 
                 while not pp.isDone():
@@ -286,7 +286,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
             # key based login
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 return ssh.Copy.WriteToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
@@ -308,7 +308,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
             # key based login
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 return ssh.Copy.ReadFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
@@ -321,7 +321,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
             # key based login
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 return ssh.Copy.ReadCompressedFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
@@ -335,7 +335,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         creds = self.Creds(yabiusername, creds, dst)
         if 'key' in creds and creds['key']:
             # key based login
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 return ssh.Copy.WriteCompressedToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
         else:
             # password based login
