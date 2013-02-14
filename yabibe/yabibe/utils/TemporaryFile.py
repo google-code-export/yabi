@@ -2,7 +2,7 @@
 import tempfile
 import os
 
-class TempFile(object):
+class TemporaryFile(object):
     def __init__(self, data, path=None):
         self.path = path
         self.data = data
