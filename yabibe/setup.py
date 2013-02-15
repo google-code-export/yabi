@@ -44,7 +44,7 @@ setup(name='yabibe',
         'greenlet',
         'psutil',
         'boto',
-        'requests',
+        'grequests',
     ],
     dependency_links = [
           "http://repo.ccgapps.com.au",

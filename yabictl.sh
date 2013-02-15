@@ -147,7 +147,6 @@ function startyabibe() {
     mkdir -p ~/.yabi/run/backend/temp
 
     export PYTHONPATH=yabibe/yabibe
-    export YABICONF="~/.yabi/yabi.conf"
     virt_yabiadmin/bin/yabibe --pidfile=yabibe-yabictl.pid
 }
 

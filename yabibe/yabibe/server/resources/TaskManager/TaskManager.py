@@ -24,7 +24,15 @@ DEBUG = False
 VERBOSE = False
 
 # set this to true to make sure theres a heartbeat in the logs... so you know that things are working. 
-HEARTBEAT = False
+HEARTBEAT = True
+
+if DEBUG:
+    def debug(*args, **kwargs):
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
 
 class TaskManager(object):
     TASK_HOST = "localhost"
@@ -157,7 +165,8 @@ class TaskManager(object):
             connect_failed = self.connect_failed,
         )
 
-        factory.noisy = False
+        factory.noisy = True
+        debug(yabiadminscheme=config.yabiadminscheme)
         if VERBOSE:
             if config.yabiadminscheme == 'https':
                 print "reactor.connectSSL(",config.yabiadminserver,",",config.yabiadminport,",",os.path.join(config.yabiadminpath,self.TASK_URL),")"
