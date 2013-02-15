@@ -17,6 +17,16 @@ DEFAULT_GET_PRIORITY = 1
 
 DOWNLOAD_BLOCK_SIZE = 8192
 
+DEBUG = False
+
+if DEBUG:
+    def debug(*args, **kwargs):
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
+
 class FileGetResource(resource.PostableResource):
     VERSION=0.1
     
@@ -65,13 +75,10 @@ class FileGetResource(resource.PostableResource):
                 
             # compile any credentials together to pass to backend
             for keyname in self.KEYSET:
-                print "k",keyname
                 if keyname in kwargs:
                     if keyname not in creds:
                         creds[keyname]={}
                     creds[keyname] = kwargs[keyname]
-        
-            print "creds",creds
         else:
             yabiusername = kwargs['yabiusername']
         
@@ -167,18 +174,14 @@ class FileGetResource(resource.PostableResource):
         bytes_to_read = int(request.args['bytes'][0]) if 'bytes' in request.args else None
         
         if "yabiusername" in request.args:
-            print "YABIUSERNAME"
             yabiusername = request.args['yabiusername'][0]
             return self.handle_get( uri, bytes_to_read, yabiusername=yabiusername )
         elif False not in [(X in request.args) for X in self.KEYSET]:
             # all the other keys are present
-            print "KEYS"
             keyvals = dict( [ (keyname,request.args[keyname][0]) for keyname in self.KEYSET ] )
-            print "keyvals",keyvals
             return self.handle_get( uri, bytes_to_read, **keyvals)
                                         
         # fall through = error
-        print "FALLTHROUGH"
         return http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, 
             "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         )

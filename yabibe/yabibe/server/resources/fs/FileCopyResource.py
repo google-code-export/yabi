@@ -18,6 +18,14 @@ DEFAULT_COPY_PRIORITY = 1                   # not immediate by default but high 
 
 DEBUG = False
 
+if DEBUG:
+    def debug(*args, **kwargs):
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
+
 # module level storage for a summary of all the present copy jobs
 # key = yabiusername
 # value = (src,dst,readprocproto_weakref, writeprocproto_weakref)
@@ -117,9 +125,8 @@ class FileCopyResource(resource.PostableResource):
                 copies_in_progress[yabiusername]=[]
             copies_in_progress[yabiusername].append( (src,dst,weakref.ref(readproto),weakref.ref(writeproto)) )
             
-            if DEBUG:
-                print "READ:",readproto,fifo2
-                print "WRITE:",writeproto,fifo
+            debug( "READ:",readproto,fifo2 )
+            debug( "WRITE:",writeproto,fifo )
                        
             # wait for one to finish
             while not readproto.isDone() and not writeproto.isDone():
@@ -128,8 +135,7 @@ class FileCopyResource(resource.PostableResource):
             # if one died and not the other, then kill the non dead one
             if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
                 # readproto failed. write proto is still running. Kill it
-                if DEBUG:
-                    print "READ FAILED",readproto.exitcode,writeproto.exitcode
+                debug( "READ FAILED",readproto.exitcode,writeproto.exitcode )
                 print "read failed. attempting os.kill(",writeproto.transport.pid,",",signal.SIGKILL,")",type(writeproto.transport.pid),type(signal.SIGKILL)
                 while writeproto.transport.pid==None:
                     #print "writeproto transport pid not set. waiting for setting..."
@@ -150,14 +156,13 @@ class FileCopyResource(resource.PostableResource):
                         gevent.sleep()
             
             if readproto.exitcode==0 and writeproto.exitcode==0:
-                if DEBUG:
-                    print "Copy finished exit codes 0"
-                    print "readproto:"
-                    print "ERR:",readproto.err
-                    print "OUT:",readproto.out
-                    print "writeproto:"
-                    print "ERR:",writeproto.err
-                    print "OUT:",writeproto.out
+                debug( "Copy finished exit codes 0")
+                debug( "readproto:" )
+                debug( "ERR:",readproto.err )
+                debug( "OUT:",readproto.out )
+                debug( "writeproto:" )
+                debug( "ERR:",writeproto.err )
+                debug( "OUT:",writeproto.out )
                     
                 channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "Copy OK\n"))
             else:
@@ -165,7 +170,6 @@ class FileCopyResource(resource.PostableResource):
                 wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
                 
                 msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
-                #print "MSG",msg
                 channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, msg))
                 
         client_channel = defer.Deferred()

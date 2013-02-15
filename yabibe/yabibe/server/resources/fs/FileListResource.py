@@ -15,6 +15,14 @@ DEFAULT_LIST_PRIORITY = 0                   # immediate by default
 
 DEBUG = False
 
+if DEBUG:
+    def debug(*args, **kwargs):
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
+
 class FileListResource(resource.PostableResource):
     VERSION=0.1
     maxMem = 100*1024
@@ -37,13 +45,12 @@ class FileListResource(resource.PostableResource):
         path = address.path
         hostname = address.hostname
         port = address.port
-        
+
         # get the backend
         fsresource = self.fsresource()
         bend = fsresource.GetBackend(bendname)
-        
-        if DEBUG:
-                print "ls() hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse
+
+        debug( "ls() hostname=",hostname,"path=",path,"username=",username,"recurse=",recurse )
         return bend.ls(hostname,path=path,port=port, username=username,recurse=recurse, yabiusername=yabiusername, creds=creds, priority=priority)
         
     #@hmac_authenticated
@@ -73,9 +80,8 @@ class FileListResource(resource.PostableResource):
         
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
         
-        if DEBUG:
-            print "URI",uri
-            print "ADDRESS",address
+        debug( "URI",uri )
+        debug( "ADDRESS",address )
         
  
         # our client channel
@@ -98,9 +104,9 @@ class FileListResource(resource.PostableResource):
             except Exception, e:
                 print traceback.format_exc()
                 client_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, stream=str(e)))
-            
+
         tasklet = gevent.spawn(do_list)
-        
+
         return client_channel
             
     def http_POST(self, request):
