@@ -168,8 +168,8 @@ class LocalConnector(ExecConnector):
             sub = Submission(submission)
             sub.render(submission_data)
             
-            outstream = StreamLogger(lambda x: log("sub out:"+x))
-            errstream = StreamLogger(lambda x: log("sub err:"+x))
+            outstream = StreamLogger(lambda x: log("submission script stdout:"+x))
+            errstream = StreamLogger(lambda x: log("submission script stderr:"+x))
             
             if len(sub.render().strip()):
                 log("rendered submission script is:\n"+sub.render())
@@ -190,7 +190,7 @@ class LocalConnector(ExecConnector):
             jobid(str(pp.pid))
             
             # get env and info it
-            info(localrun.subenv)
+            info("submission script environment: %s"%localrun.subenv)
         
             while not pp.isDone():
                 gevent.sleep(self.delay)

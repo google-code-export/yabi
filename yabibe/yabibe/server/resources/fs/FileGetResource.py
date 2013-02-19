@@ -3,6 +3,7 @@ import traceback
 import weakref
 
 import gevent
+from conditional import conditional
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
 
@@ -11,13 +12,15 @@ from yabibe.exceptions import CredentialNotFound
 from yabibe.utils.FifoStream import FifoStream
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTData
+from yabibe.utils.TemporaryFile import TemporaryFile
+
 
 
 DEFAULT_GET_PRIORITY = 1
 
 DOWNLOAD_BLOCK_SIZE = 8192
 
-DEBUG = False
+DEBUG = True
 
 if DEBUG:
     def debug(*args, **kwargs):
@@ -28,10 +31,10 @@ else:
         pass
 
 class FileGetResource(resource.PostableResource):
-    VERSION=0.1
+    VERSION = 0.1
     
     # all the kenames that compose credentials for both src and dst
-    KEYSET =    [ 'key','password','username','cert' ]
+    KEYSET = [ 'key','password','username','cert' ]
     
     def __init__(self,request=None, path=None, fsresource=None):
         """Pass in the backends to be served out by this FSResource"""
@@ -42,7 +45,7 @@ class FileGetResource(resource.PostableResource):
         
         self.fsresource = weakref.ref(fsresource)
     
-    def get(self,uri, yabiusername=None, creds={}, priority=0):
+    def get(self,uri, yabiusername=None, creds={}, priority=0, credfilename=None):
         scheme, address = parse_url(uri)
         if not hasattr(address,"username"):
             raise Exception, "No username provided in uri"
@@ -60,9 +63,11 @@ class FileGetResource(resource.PostableResource):
             raise Exception, "Backend '%s' not found\n"%scheme
             
         bend = self.fsresource().GetBackend(scheme)
+
+        debug(bend=bend)
         
         # returns ( procproto object, fifo filename )
-        return bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds)
+        return bend.GetReadFifo(hostname,username,basepath,port,filename,yabiusername=yabiusername,creds=creds,credfilename=credfilename)
         
     def handle_get(self, uri, bytes=None, **kwargs):
         creds = {}
@@ -87,71 +92,72 @@ class FileGetResource(resource.PostableResource):
         
         def download_tasklet(channel):
             """Tasklet to do file download"""
-            try:
-                procproto, fifo = self.get(uri,yabiusername=yabiusername,creds=creds,priority=0)
-                
-                def fifo_cleanup(response):
-                    os.unlink(fifo)
-                    return response
-                channel.addCallback(fifo_cleanup)
-                
-            except CredentialNotFound, nc:
-                print traceback.format_exc()
-                return channel.callback(http.Response( responsecode.UNAUTHORIZED, {'content-type': http_headers.MimeType('text', 'plain')}, str(nc) ))
-            except Exception, exc:
-                print traceback.format_exc()
-                return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(exc) ))
-            
-            # give the engine a chance to fire up the process
-            while not procproto.isStarted():
-                gevent.sleep(0.1)
-            
-            # nonblocking open the fifo
-            fd = no_intr(os.open,fifo,os.O_RDONLY | os.O_NONBLOCK )
-            file = os.fdopen(fd)
-        
-            # make sure file handle is non blocking
-            import fcntl, errno
-            fcntl.fcntl(file.fileno(), fcntl.F_SETFL, os.O_NONBLOCK) 
-            
-            # datastream stores whether we have sent an ok response code yet
-            datastream = False
-            
-            data = True
-            while data:
-                # because this is nonblocking, it might raise IOError 11
-                data = no_intr(file.read,DOWNLOAD_BLOCK_SIZE)
-                
-                if data != True:
-                    if len(data):
-                        # we have data
-                        if not datastream:
-                            datastream = FifoStream(file, truncate=bytes_to_read)
-                            datastream.prepush(data)
-                            return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
-                    else:
-                        # end of fifo OR empty file OR MAYBE the write process is slow and hasn't written into it yet.
-                        # if its an empty file or an unwritten yet file our task is the same... keep trying to read it
-                        
-                        # Did we error out? Wait until task is finished
-                        while not procproto.isDone():
-                            data = no_intr(file.read,DOWNLOAD_BLOCK_SIZE)
-                            if len(data):
+            with conditional( 'key' in creds, TemporaryFile(creds['key']) ) as tf:
+                try:
+                    procproto, fifo = self.get(uri,yabiusername=yabiusername,creds=creds,priority=0,credfilename=tf.filename if tf else None)
+
+                    def fifo_cleanup(response):
+                        os.unlink(fifo)
+                        return response
+                    channel.addCallback(fifo_cleanup)
+
+                except CredentialNotFound, nc:
+                    print traceback.format_exc()
+                    return channel.callback(http.Response( responsecode.UNAUTHORIZED, {'content-type': http_headers.MimeType('text', 'plain')}, str(nc) ))
+                except Exception, exc:
+                    print traceback.format_exc()
+                    return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(exc) ))
+
+                # give the engine a chance to fire up the process
+                while not procproto.isStarted():
+                    gevent.sleep(0.1)
+
+                # nonblocking open the fifo
+                fd = no_intr(os.open,fifo,os.O_RDONLY | os.O_NONBLOCK )
+                file = os.fdopen(fd)
+
+                # make sure file handle is non blocking
+                import fcntl, errno
+                fcntl.fcntl(file.fileno(), fcntl.F_SETFL, os.O_NONBLOCK) 
+
+                # datastream stores whether we have sent an ok response code yet
+                datastream = False
+
+                data = True
+                while data:
+                    # because this is nonblocking, it might raise IOError 11
+                    data = no_intr(file.read,DOWNLOAD_BLOCK_SIZE)
+
+                    if data != True:
+                        if len(data):
+                            # we have data
+                            if not datastream:
                                 datastream = FifoStream(file, truncate=bytes_to_read)
                                 datastream.prepush(data)
                                 return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
-                            gevent.sleep(0.1)
-                        
-                        if procproto.exitcode:
-                            return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Get failed: %s\n"%procproto.err ))
                         else:
-                            # transfer the file
-                            datastream = FifoStream(file, truncate=bytes_to_read)
-                            return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
-                    
-                gevent.sleep()
-                
-            return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Catastrophic codepath violation. This error should never happen. It's a bug!" ))
+                            # end of fifo OR empty file OR MAYBE the write process is slow and hasn't written into it yet.
+                            # if its an empty file or an unwritten yet file our task is the same... keep trying to read it
+
+                            # Did we error out? Wait until task is finished
+                            while not procproto.isDone():
+                                data = no_intr(file.read,DOWNLOAD_BLOCK_SIZE)
+                                if len(data):
+                                    datastream = FifoStream(file, truncate=bytes_to_read)
+                                    datastream.prepush(data)
+                                    return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
+                                gevent.sleep(0.1)
+
+                            if procproto.exitcode:
+                                return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Get failed: %s\n"%procproto.err ))
+                            else:
+                                # transfer the file
+                                datastream = FifoStream(file, truncate=bytes_to_read)
+                                return channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('application', 'data')}, stream=datastream ))
+
+                    gevent.sleep()
+
+                return channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, "Catastrophic codepath violation. This error should never happen. It's a bug!" ))
 
         
         tasklet = gevent.spawn(download_tasklet, client_channel )
