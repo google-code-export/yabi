@@ -327,7 +327,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
 
         # if credfilename is None, this is a password login
         # if its a TemporaryFile context manager filename, then its the file with the key stored in it
-        return ssh.Copy.WriteCompressedFromRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
+        return ssh.Copy.WriteCompressedToRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
         
     def Creds(self, yabiusername, creds, uri):
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"

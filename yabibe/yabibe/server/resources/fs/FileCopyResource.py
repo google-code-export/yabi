@@ -121,7 +121,7 @@ class FileCopyResource(resource.PostableResource):
 
                 with conditional(
                         'dst' in creds and 'key' in creds['dst'],
-                        TemporaryFile(creds['dst']['key'] if 'dst' in creds and 'key' in creds['dst'] else None)
+                        TemporaryFile(creds['dst']['key'] if 'dst' in creds and 'key' in creds['dst']  else None)
                         ) as destkey:
                     try:
                         writeproto, fifo = dbend.GetWriteFifo(dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername,creds=creds['dst'] if 'dst' in creds else {}, credfilename = destkey.filename if destkey else None )
