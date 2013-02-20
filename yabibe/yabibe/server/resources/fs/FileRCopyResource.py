@@ -2,6 +2,9 @@ import os
 import traceback
 import weakref
 
+from conditional import conditional
+
+
 import gevent
 from twisted.internet import defer
 from twistedweb2 import resource, http_headers, responsecode, http
@@ -10,7 +13,7 @@ from yabibe.exceptions import BlockingException, NotImplemented
 from yabibe.server.resources.TaskManager.TaskTools import Sleep, Copy, List, Mkdir, GETFailure, CopyError
 from yabibe.utils.parsers import parse_url
 from yabibe.utils.submit_helpers import parsePOSTDataRemoteWriter
-
+from yabibe.utils.TemporaryFile import TemporaryFile
 
 DEFAULT_RCOPY_PRIORITY = 1
 
@@ -100,166 +103,179 @@ class FileRCopyResource(resource.PostableResource):
             
             #our http result channel. this stays open until the copy is finished
             result_channel = defer.Deferred()
+
+            # build our creds
+            creds={}
+            creds['dst'] = dbend.Creds(yabiusername, {}, dst)
+            creds['src'] = sbend.Creds(yabiusername, {}, src)
             
             #
             # our top down tasklet to run
             #
             def rcopy_runner_thread():
-                try:
-                    ##
-                    ## Try using zput/zget to do rcopy first
-                    ##
-                    try:
-                        writeproto, fifo = dbend.GetCompressedWriteFifo( dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername)
-                        readproto, fifo2 = sbend.GetCompressedReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername)
-                        
-                        def fifo_cleanup(response):
-                            os.unlink(fifo)
-                            return response
-                        result_channel.addCallback(fifo_cleanup)
-                        
-                    except BlockingException, be:
-                        #sbend.unlock(locks[0])
-                        #if locks[1]:
-                            #dbend.unlock(locks[1])
-                        print traceback.format_exc()
-                        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
-                        return
-                        
-                        
-                        
-                    if DEBUG:
-                        print "READ:",readproto,fifo2
-                        print "WRITE:",writeproto,fifo
-                            
-                    # wait for one to finish
-                    while not readproto.isDone() and not writeproto.isDone():
-                        gevent.sleep()
-                    
-                    # if one died and not the other, then kill the non dead one
-                    if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
-                        # readproto failed. write proto is still running. Kill it
-                        if DEBUG:
-                            print "READ FAILED",readproto.exitcode,writeproto.exitcode
-                        print "read failed. attempting os.kill(",writeproto.transport.pid,",",signal.SIGKILL,")",type(writeproto.transport.pid),type(signal.SIGKILL)
-                        while writeproto.transport.pid==None:
-                            #print "writeproto transport pid not set. waiting for setting..."
-                            gevent.sleep()
-                        os.kill(writeproto.transport.pid, signal.SIGKILL)
-                    else:
-                        # wait for write to finish
-                        if DEBUG:
-                            print "WFW",readproto.exitcode,writeproto.exitcode
-                        while writeproto.exitcode == None:
-                            gevent.sleep()
-                        
-                        # did write succeed?
-                        if writeproto.exitcode == 0:
-                            if DEBUG:
-                                print "WFR",readproto.exitcode,writeproto.exitcode
-                            while readproto.exitcode == None:
-                                gevent.sleep()
-                    
-                    if readproto.exitcode==0 and writeproto.exitcode==0:
-                        if DEBUG:
-                            print "Copy finished exit codes 0"
-                            print "readproto:"
-                            print "ERR:",readproto.err
-                            print "OUT:",readproto.out
-                            print "writeproto:"
-                            print "ERR:",writeproto.err
-                            print "OUT:",writeproto.out
-                            
-                        result_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "Copy OK\n"))
-                        return
-                    else:
-                        rexit = "Killed" if readproto.exitcode==None else str(readproto.exitcode)
-                        wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
-                        
-                        msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
-                        #print "MSG",msg
-                        result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, msg))
-                        return
-                    
-                except NotImplemented, ni:    
-                    ##
-                    ## Fallback to old manual rcopy
-                    ##
-                    print "NO FALLBACK", ni
-                    return
-                    
-                    # get a recursive listing of the source
-                    try:
-                        fsystem = List(path=src,recurse=True,yabiusername=yabiusername)
-                    except BlockingException, be:
-                        print traceback.format_exc()
-                        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
-                    
-                    # lets split the source path on separator
-                    destination_dir_name = "" if copy_contents else ([X for X in src.split("/") if len(X)][-1]+'/')
-                    
-                    # remember the directories we make so we only make them once
-                    created=[]
-                    
-                    # count the files we copy
-                    file_count = 0
-                    folder_count = 0
-                    
-                    for directory in sorted(fsystem.keys()):
-                        # make directory
-                        destpath = directory[len(src_path)+1:]              # the subpath part
-                        if len(destpath) and destpath[-1]!='/':
-                            destpath += '/'
-                        #print "D:",dst,":",destpath,";",src_path
-                        if dst+destination_dir_name+destpath not in created:
-                            #print dst+destination_dir_name+destpath,"not in",created
+                with conditional(
+                        'src' in creds and 'key' in creds['src'],
+                        TemporaryFile(creds['src']['key'] if 'src' in creds and 'key' in creds['src'] else None)
+                        ) as sourcekey:
+                    with conditional(
+                            'dst' in creds and 'key' in creds['dst'],
+                            TemporaryFile(creds['dst']['key'] if 'dst' in creds and 'key' in creds['dst']  else None)
+                            ) as destkey:
+                        try:
+                            ##
+                            ## Try using zput/zget to do rcopy first
+                            ##
                             try:
-                                Mkdir(dst+destination_dir_name+destpath,yabiusername=yabiusername)
-                                folder_count += 1
+                                writeproto, fifo = dbend.GetCompressedWriteFifo( dst_hostname, dst_username, dst_path, dst_port, dst_filename,yabiusername=yabiusername, credfilename = destkey.filename if destkey else None)
+                                readproto, fifo2 = sbend.GetCompressedReadFifo(src_hostname, src_username, src_path, src_port, src_filename, fifo,yabiusername=yabiusername, credfilename = sourcekey.filename if sourcekey else None )
+
+                                def fifo_cleanup(response):
+                                    os.unlink(fifo)
+                                    return response
+                                result_channel.addCallback(fifo_cleanup)
+
+                            except BlockingException, be:
+                                #sbend.unlock(locks[0])
+                                #if locks[1]:
+                                    #dbend.unlock(locks[1])
+                                print traceback.format_exc()
+                                result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)))
+                                return
+
+
+
+                            if DEBUG:
+                                print "READ:",readproto,fifo2
+                                print "WRITE:",writeproto,fifo
+
+                            # wait for one to finish
+                            while not readproto.isDone() and not writeproto.isDone():
+                                gevent.sleep()
+
+                            # if one died and not the other, then kill the non dead one
+                            if readproto.isDone() and readproto.exitcode!=0 and not writeproto.isDone():
+                                # readproto failed. write proto is still running. Kill it
+                                if DEBUG:
+                                    print "READ FAILED",readproto.exitcode,writeproto.exitcode
+                                print "read failed. attempting os.kill(",writeproto.transport.pid,",",signal.SIGKILL,")",type(writeproto.transport.pid),type(signal.SIGKILL)
+                                while writeproto.transport.pid==None:
+                                    #print "writeproto transport pid not set. waiting for setting..."
+                                    gevent.sleep()
+                                os.kill(writeproto.transport.pid, signal.SIGKILL)
+                            else:
+                                # wait for write to finish
+                                if DEBUG:
+                                    print "WFW",readproto.exitcode,writeproto.exitcode
+                                while writeproto.exitcode == None:
+                                    gevent.sleep()
+
+                                # did write succeed?
+                                if writeproto.exitcode == 0:
+                                    if DEBUG:
+                                        print "WFR",readproto.exitcode,writeproto.exitcode
+                                    while readproto.exitcode == None:
+                                        gevent.sleep()
+
+                            if readproto.exitcode==0 and writeproto.exitcode==0:
+                                if DEBUG:
+                                    print "Copy finished exit codes 0"
+                                    print "readproto:"
+                                    print "ERR:",readproto.err
+                                    print "OUT:",readproto.out
+                                    print "writeproto:"
+                                    print "ERR:",writeproto.err
+                                    print "OUT:",writeproto.out
+
+                                result_channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, "Copy OK\n"))
+                                return
+                            else:
+                                rexit = "Killed" if readproto.exitcode==None else str(readproto.exitcode)
+                                wexit = "Killed" if writeproto.exitcode==None else str(writeproto.exitcode)
+
+                                msg = "Copy failed:\n\nRead process: "+rexit+"\n"+readproto.err+"\n\nWrite process: "+wexit+"\n"+writeproto.err+"\n"
+                                #print "MSG",msg
+                                result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, msg))
+                                return
+
+                        except NotImplemented, ni:    
+                            ##
+                            ## Fallback to old manual rcopy
+                            ##
+                            print "NO FALLBACK", ni
+                            return
+
+                            # get a recursive listing of the source
+                            try:
+                                fsystem = List(path=src,recurse=True,yabiusername=yabiusername)
                             except BlockingException, be:
                                 print traceback.format_exc()
-                                result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )    
-                            except GETFailure, gf:
-                                # ignore. directory probably already exists
-                                pass
-                            created.append(dst+destination_dir_name+destpath)
-                             
-                        for file,size,date,link in fsystem[directory]['files']:
-                            if DEBUG:
-                                print "COPY",file,size,date
-                                print "EXTRA",">",destpath,">",directory
-                            src_uri = src+destpath+file
-                            dst_uri = dst+destination_dir_name+destpath+file
-                            
-                            if DEBUG:
-                                print "Copy(",src_uri,",",dst_uri,")"
-                            #print "Copy(",sbend+directory+"/"+file,",",dst+destpath+'/'+file,")"
-                            try:
-                                Copy(src_uri,dst_uri,yabiusername=yabiusername,priority=priority)
-                                file_count += 1
-                            except CopyError, ce:
-                                print "RCOPY: Continuing after failed copy %s => %s : %s"%(src_uri,dst_uri,str(ce))
-                            Sleep(0.1)
-                    
-                    result_channel.callback(
-                                                    http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, 
-                                                    "%d files %d folders copied successfuly\n"%(file_count, folder_count) )
-                                )
-                except BlockingException, be:
-                    print traceback.format_exc()
-                    result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
-                except GETFailure, gf:
-                    print traceback.format_exc()
-                    if "503" in gf.message[1]:
-                        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
-                    else:
-                        result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
-                except Exception, e:
-                    print traceback.format_exc()
-                    result_channel.callback(
-                                                    http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))
-                                )
-                    return
+                                result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+
+                            # lets split the source path on separator
+                            destination_dir_name = "" if copy_contents else ([X for X in src.split("/") if len(X)][-1]+'/')
+
+                            # remember the directories we make so we only make them once
+                            created=[]
+
+                            # count the files we copy
+                            file_count = 0
+                            folder_count = 0
+
+                            for directory in sorted(fsystem.keys()):
+                                # make directory
+                                destpath = directory[len(src_path)+1:]              # the subpath part
+                                if len(destpath) and destpath[-1]!='/':
+                                    destpath += '/'
+                                #print "D:",dst,":",destpath,";",src_path
+                                if dst+destination_dir_name+destpath not in created:
+                                    #print dst+destination_dir_name+destpath,"not in",created
+                                    try:
+                                        Mkdir(dst+destination_dir_name+destpath,yabiusername=yabiusername)
+                                        folder_count += 1
+                                    except BlockingException, be:
+                                        print traceback.format_exc()
+                                        result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )    
+                                    except GETFailure, gf:
+                                        # ignore. directory probably already exists
+                                        pass
+                                    created.append(dst+destination_dir_name+destpath)
+
+                                for file,size,date,link in fsystem[directory]['files']:
+                                    if DEBUG:
+                                        print "COPY",file,size,date
+                                        print "EXTRA",">",destpath,">",directory
+                                    src_uri = src+destpath+file
+                                    dst_uri = dst+destination_dir_name+destpath+file
+
+                                    if DEBUG:
+                                        print "Copy(",src_uri,",",dst_uri,")"
+                                    #print "Copy(",sbend+directory+"/"+file,",",dst+destpath+'/'+file,")"
+                                    try:
+                                        Copy(src_uri,dst_uri,yabiusername=yabiusername,priority=priority)
+                                        file_count += 1
+                                    except CopyError, ce:
+                                        print "RCOPY: Continuing after failed copy %s => %s : %s"%(src_uri,dst_uri,str(ce))
+                                    Sleep(0.1)
+
+                            result_channel.callback(
+                                                            http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, 
+                                                            "%d files %d folders copied successfuly\n"%(file_count, folder_count) )
+                                        )
+                        except BlockingException, be:
+                            print traceback.format_exc()
+                            result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(be)) )
+                        except GETFailure, gf:
+                            print traceback.format_exc()
+                            if "503" in gf.message[1]:
+                                result_channel.callback(http.Response( responsecode.SERVICE_UNAVAILABLE, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+                            else:
+                                result_channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(gf)) )
+                        except Exception, e:
+                            print traceback.format_exc()
+                            result_channel.callback(
+                                                            http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, str(e))
+                                        )
+                            return
 
             copier = gevent.spawn(rcopy_runner_thread)
             
