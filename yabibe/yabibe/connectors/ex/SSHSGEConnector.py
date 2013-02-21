@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+import random
 
 import gevent
 from twisted.python import log
@@ -8,7 +9,7 @@ from twistedweb2 import http, responsecode, http_headers, stream
 
 from yabibe.exceptions import ExecutionError
 from ExecConnector import ExecConnector
-from SubmissionTemplate import make_script
+from SubmissionTemplate import make_script, Submission
 from yabibe.conf import config
 from yabibe.server.resources.TaskManager.TaskTools import RemoteInfo
 from yabibe.utils.RetryController import SSHSGEQsubRetryController, SSHSGEQstatRetryController, SSHSGEQacctRetryController, HARD
@@ -27,11 +28,17 @@ SCHEMA = "ssh+sge"
 
 DEBUG = False
 
+import sys
+def debug(*args, **kwargs):
+    if DEBUG:
+        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+
+
 # where we temporarily store the submission scripts on the submission host
 TMP_DIR = "/tmp"
 
 
-sshauth = ssh.SSHAuth.SSHAuth()
+sshauth = ssh.SSHAuth.SSHAuth()             # TODO: remove the reliance on this deprecated code
 qsubretry = SSHSGEQsubRetryController()
 qstatretry = SSHSGEQstatRetryController()
 qacctretry = SSHSGEQacctRetryController()
@@ -69,94 +76,62 @@ def rerun_delays():
         totaltime+=300.0
         yield 300.0
         
-class SSHSGEConnector(ExecConnector, ssh.KeyStore.KeyStore):
+class SSHSGEConnector(ExecConnector):
     def __init__(self):
         ExecConnector.__init__(self)
+        self.configdir = config.config['backend']['certificates']      #TODO: put our ssh keys in here
         
-        configdir = config.config['backend']['certificates']
-        ssh.KeyStore.KeyStore.__init__(self, dir=configdir)
-    
-    def _ssh_qsub(self, yabiusername, creds, command, working, username, host, remoteurl, submission, stdout, stderr, modules, walltime, memory, cpus, queue, tasknum, tasktotal ):
-        """This submits via ssh the qsub command. This returns the jobid, or raises an exception on an error"""
-        assert type(modules) is not str and type(modules) is not unicode, "parameter modules should be sequence or None, not a string or unicode"
-        
+    def _ssh_qsub(self, yabiusername, working, submission, submission_data, log_cb):
+        subdata = Submission(submission).render(submission_data)
+        # remote submission script name
         submission_script = os.path.join(TMP_DIR,str(uuid.uuid4())+".sh")
-        
-        qsub_submission_script = "'%s' -N '%s' -e '%s' -o '%s' -wd '%s' '%s'"%(    
-                                                                        config.config['ssh+sge']['qsub'],
-                                                                        "yabi-"+remoteurl.rsplit('/')[-1],
-                                                                        os.path.join(working,stderr),
-                                                                        os.path.join(working,stdout),
-                                                                        working,
-                                                                        submission_script
-                                                                    )
-        
+
+        qsub_command = "'%s' -N '%s' -e '%s' -o '%s' -wd '%s' '%s'"%(    
+                                                                    config.config['ssh+sge']['qsub'],
+                                                                    "yabi-%s"%random.randint(0,10000),  ###TODO: use the yabi id as a number not random.
+                                                                    os.path.join(working,submission_data['stderr']),
+                                                                    os.path.join(working,submission_data['stdout']),
+                                                                    working,
+                                                                    submission_script
+                                                                )
         # build up our remote qsub command
         ssh_command = "cat >'%s' && "%(submission_script)
-        ssh_command += qsub_submission_script
+        ssh_command += submission_script
         ssh_command += " ; EXIT=$? "
         ssh_command += " ; rm '%s'"%(submission_script)
         #ssh_command += " ; echo $EXIT"
         ssh_command += " ; exit $EXIT"
 
-        if DEBUG:
-            print "ssh command:",ssh_command
+        debug(ssh_command=ssh_command)
 
-        if not creds:
-            creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, "/", credtype="exec")
-    
-        usercert = self.save_identity(creds['key'])
-        
-        # build our command script
-        script_string = make_script(submission,working,command,modules,cpus,memory,walltime,yabiusername,username,host,queue,stdout,stderr,tasknum,tasktotal)
-        
-        # hande log setting
-        if config.config['execution']['logcommand']:
-            print SCHEMA+" attempting submission command: "+qsub_submission_script
-            
-        if config.config['execution']['logscripts']:
-            print SCHEMA+" submission script:"
-            print script_string
-        
-        if DEBUG:
-            print "usercert:",usercert
-            print "command:",command
-            print "username:",username
-            print "host:",host
-            print "working:",working
-            print "port:","22"
-            print "stdout:",stdout
-            print "stderr:",stderr
-            print "modules",modules
-            print "password:","*"*len(creds['password'])
-            print "script:",script_string
-            
-        pp = ssh.Run.run(usercert,ssh_command,username,host,working=None,port="22",stdout=None,stderr=None,password=creds['password'], modules=modules, streamin=script_string)
-        while not pp.isDone():
-            gevent.sleep()
-            
-        if DEBUG:
-            print "EXITCODE:",pp.exitcode
-            print "STDERR:",pp.err
-            print "STDOUT:",pp.out
-            
-        if pp.exitcode==0:
-            # success
-            jobid_string = pp.out.strip().split("\n")[-1]
-            return jobid_string.split('("')[-1].split('")')[0]
-        else:
-            # process has exited non-zero. 255 is transport error and should be retried
-            if pp.exitcode==255:
-                raise SSHTransportException("Error: SSH exited %d with message %s"%(pp.exitcode,pp.err))
-            
-            # else we need to analyse the result and decide on hard/soft
-            error_type = qsubretry.test(pp.exitcode,pp.err)
-            if error_type == HARD:
-                # hard error
-                raise SSHQsubHardException("SSHQsub error: SSH exited %d with message %s"%(pp.exitcode,pp.err))
-            
-        #soft error
-        raise SSHQsubSoftException("SSHQsub error: SSH exited: %d with message %s"%(pp.exitcode,pp.err))
+        # get our creds
+        creds = sshauth.AuthProxyUser(yabiusername, SCHEMA, username, host, "/", credtype="exec")
+
+        with TemporaryFile( creds['key'] ) as sshkey:
+            log_cb( "Submission command:\n" + qsub_command )
+            log_cb( "Submission script:\n" + subdata )
+
+            pp = ssh.Run.run( sshkey.filename, ssh_command, username=creds['username'], host=creds['hostname'], password=creds['password'], streamin=subdata)
+            while not pp.isDone():
+                gevent.sleep()
+
+            if pp.exitcode==0:
+                # success
+                jobid_string = pp.out.strip().split("\n")[-1]
+                return jobid_string.split('("')[-1].split('")')[0]
+            else:
+                # process has exited non-zero. 255 is transport error and should be retried
+                if pp.exitcode==255:
+                    raise SSHTransportException("Error: SSH exited %d with message %s"%(pp.exitcode,pp.err))
+
+                # else we need to analyse the result and decide on hard/soft
+                error_type = qsubretry.test(pp.exitcode,pp.err)
+                if error_type == HARD:
+                    # hard error
+                    raise SSHQsubHardException("SSHQsub error: SSH exited %d with message %s"%(pp.exitcode,pp.err))
+
+            #soft error
+            raise SSHQsubSoftException("SSHQsub error: SSH exited: %d with message %s"%(pp.exitcode,pp.err))
             
     def _ssh_qstat(self, yabiusername, creds, command, working, username, host, stdout, stderr, modules, jobid):
         """This submits via ssh the qstat command. This takes the jobid"""
@@ -261,48 +236,46 @@ class SSHSGEConnector(ExecConnector, ssh.KeyStore.KeyStore):
         # everything else is soft
         raise SSHQacctSoftException("SSHQacct Error: SSH exited %d with message %s"%(pp.exitcode,pp.err))
 
-    def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
-        modules = [] if not module else [X.strip() for X in module.split(",")]
+    def run(self, yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
+        """Runs a command through the SSHSGE backend. Callbacks for info/log/state.
+
+        state: callback to set task state
+        jobid: callback to set jobid/taskid/processid
+        info: callback to set key/value info
+        log: callback for log messages to go to admin
+        """
+        
         delay_gen = rerun_delays()
             
         while True:        
             try:
-                jobid = self._ssh_qsub(yabiusername,creds,command,working,username,host,remoteurl,submission,stdout,stderr,modules,walltime,memory,cpus,queue,tasknum,tasktotal)
+                jobid = self._ssh_qsub(yabiusername, working, submission, submission_data, log_cb)
                 break               # success... escape retry loop
-            except (SSHQsubHardException, ExecutionError), ee:
-                channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type': http_headers.MimeType('text', 'plain')}, stream = str(ee) ))
-                return
             except (SSHQsubSoftException, SSHTransportException), softexc:
-                #delay then retry
-                try:
-                    sleep(delay_gen.next())
-                except StopIteration:
-                    # run out of retries
-                    channel.callback(http.Response( responsecode.INTERNAL_SERVER_ERROR, {'content-type':http_headers.MimeType('text','plain')}, stream = str(softexc) ))
-                    return
-           
+                #delay then retry. 
+                sleep(delay_gen.next())
+                
         # send an OK message, but leave the stream open
-        client_stream = stream.ProducerStream()
-        channel.callback(http.Response( responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, stream = client_stream ))
+        log_cb( "Job successfully submitted via qsub. Job ID: %s"%jobid )
+        jobid_cb( str(jobid) )
         
         # now the job is submitted, lets remember it
-        self.add_running(jobid, {'username':username})
-        
-        # lets report our id to the caller
-        client_stream.write("id=%s\n"%jobid)
+        self.add_running(job, {'username':username})
         
         try:
             self.main_loop( yabiusername, creds, command, working, username, host, remoteurl, client_stream, stdout, stderr, modules, jobid)
+            log_cb('The job has completed')
         except (ExecutionError, SSHQstatException), ee:
             import traceback
             traceback.print_exc()
-            client_stream.write("Error\n")
+            state_cb('error')
+            log_cb('The job has failed with the following exception:\n'+traceback.format_exc())
         finally:
                 
             # delete finished job
             self.del_running(jobid)
+
             
-            client_stream.finish()
             
     def resume(self, jobid, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
         # send an OK message, but leave the stream open
