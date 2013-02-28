@@ -6,9 +6,6 @@
 # break on error
 set -e 
 
-#EASY_INSTALL_64="-f http://http-syd.s3.amazonaws.com/python/centos/6/x86_64/index.html" 
-#EASY_INSTALL_NOARCH="-f http://s3-ap-southeast-2.amazonaws.com/http-syd/python/centos/6/noarch/index.html"
-
 ARGV="$@"
 
 if [ "$YABI_CONFIG" = "" ]; then
@@ -87,19 +84,23 @@ function install() {
     # check requirements
     which virtualenv >/dev/null
 
-    export PYTHONPATH=`pwd`
-
     echo "Install yabiadmin"
     virtualenv --system-site-packages virt_yabiadmin
-    virt_yabiadmin/bin/easy_install yabiadmin/
+    pushd yabiadmin
+    ../virt_yabiadmin/bin/python setup.py develop
+    popd
     virt_yabiadmin/bin/easy_install MySQL-python==1.2.3
     virt_yabiadmin/bin/easy_install psycopg2==2.0.8
 
     echo "Install yabibe"
-    virt_yabiadmin/bin/easy_install yabibe/
+    pushd yabibe
+    ../virt_yabiadmin/bin/python setup.py develop
+    popd
 
     echo "Install yabish"
-    virt_yabiadmin/bin/easy_install yabish/
+    pushd yabish
+    ../virt_yabiadmin/bin/python setup.py develop
+    popd
 }
 
 function startyabiadmin() {
@@ -109,7 +110,6 @@ function startyabiadmin() {
     fi
 
     echo "Launch yabiadmin (frontend) http://localhost:8000"
-    export PYTHONPATH=yabiadmin
     mkdir -p ~/yabi_data_dir
     virt_yabiadmin/bin/django-admin.py syncdb --noinput --settings=$DJANGO_SETTINGS_MODULE 1> syncdb-yabictl.log
     virt_yabiadmin/bin/django-admin.py migrate --settings=$DJANGO_SETTINGS_MODULE 1> migrate-yabictl.log
@@ -146,7 +146,6 @@ function startyabibe() {
     mkdir -p ~/.yabi/run/backend/tasklets
     mkdir -p ~/.yabi/run/backend/temp
 
-    export PYTHONPATH=yabibe/yabibe
     virt_yabiadmin/bin/yabibe --pidfile=yabibe-yabictl.pid
 }
 
