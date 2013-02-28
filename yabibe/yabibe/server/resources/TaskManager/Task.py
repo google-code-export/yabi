@@ -195,7 +195,7 @@ class NullBackendTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
         
     def stage_in_files(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         dst = self.json['stageout']
         status = self.status
