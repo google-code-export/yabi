@@ -396,7 +396,7 @@ class LinkError(Exception): pass
     
 def Ln(target,link,retry=LINK_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
-    from BaseResource import base
+    from yabibe.server.resources.BaseResource import base
     delay_gen = retry_delay_generator()
     if DEBUG:
         print "linking %s from %s"%(target,link)
@@ -419,7 +419,7 @@ def Ln(target,link,retry=LINK_RETRY, log_callback=None, **kwargs):
 
 def LCopy(src,dst,retry=LCOPY_RETRY, log_callback=None, **kwargs):
     """Copy src (url) to dst (url) using the fileservice"""
-    from BaseResource import base
+    from yabibe.server.resources.BaseResource import base
     delay_gen = retry_delay_generator()
     if DEBUG:
         print "Local-Copying %s to %s"%(src,dst)
