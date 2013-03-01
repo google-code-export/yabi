@@ -146,7 +146,7 @@ class FSResource(resource.Resource, BackendResource):
         if linkscheme not in self.backends:
             raise Exception, "Backend '%s' not found\n"%linkscheme
         
-        return self.GetBackend(scheme).ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
+        return self.GetBackend(linkscheme).ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
 
     def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
         srcscheme, srcaddress = parse_url(src)
