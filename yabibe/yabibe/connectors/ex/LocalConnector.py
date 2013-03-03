@@ -1,5 +1,3 @@
-import io
-import os
 from yabibe.exceptions import ExecutionError
 from ExecConnector import ExecConnector
 
@@ -61,13 +59,7 @@ class LocalExecutionProcessProtocol(protocol.ProcessProtocol):
         
     def errReceived(self, data):
         self.stderr.write(data.replace("\r\n","\n") if self.unify_line_endings else data )
-   
-    def outConnectionLost(self):
-        self.stdout.close()
-   
-    def errConnectionLost(self):
-        self.stderr.close()
- 
+    
     def processEnded(self, status_object):
         if self.cleanup:
             self.cleanup()
@@ -140,22 +132,6 @@ class StreamLogger(object):
     def write(self,string):
         self.callback(string)
 
-    def close(self):
-        pass
-
-class CompositeStream(object):
-    def __init__(self, *streams):
-        self.streams = streams
-
-    def write(self, data):
-        for stream in self.streams:
-            stream.write(data)
-
-    def close(self):
-        for stream in self.streams:
-            stream.close()
-
-
 class LocalConnector(ExecConnector):
     delay = 0.1
     
@@ -191,12 +167,8 @@ class LocalConnector(ExecConnector):
             sub = Submission(submission)
             sub.render(submission_data)
             
-            outstream = CompositeStream(
-                            io.FileIO(os.path.join(working, submission_data["stdout"]), "w"),
-                            StreamLogger(lambda x: log("submission script stdout:"+x)))
-            errstream = CompositeStream(
-                            io.FileIO(os.path.join(working, submission_data["stderr"]), "w"),
-                            StreamLogger(lambda x: log("submission script stderr:"+x)))
+            outstream = StreamLogger(lambda x: log("submission script stdout:"+x))
+            errstream = StreamLogger(lambda x: log("submission script stderr:"+x))
             
             if len(sub.render().strip()):
                 log("rendered submission script is:\n"+sub.render())
