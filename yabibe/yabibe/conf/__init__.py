@@ -213,8 +213,10 @@ class Configuration(object):
             if os.path.exists(path) and os.path.isfile(path):
                 return self.read_from_file(path)
 
-        # config not founf
-        raise IOError("config file not found")
+        # This prevents Yabibe running on just the defaults conf
+        # ... disabling for now
+        # config not found
+        # raise IOError("config file not found")
             
     def get_section_conf(self,section):
         return self.config[section]
