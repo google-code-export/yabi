@@ -11,7 +11,6 @@
 ^yabiadmin/yabiadmin/appsettings_dir/testdb
 ^yabiadmin/build/
 ^yabiadmin/scratch/
-^yabiadmin/static/
 ^yabiadmin/yabiadmin.egg-info/
 
 ^yabibe/build/
