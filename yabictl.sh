@@ -93,8 +93,9 @@ function install() {
     virt_yabiadmin/bin/easy_install psycopg2==2.0.8
 
     echo "Install yabibe"
+    virtualenv --system-site-packages virt_yabibe
     pushd yabibe
-    ../virt_yabiadmin/bin/python setup.py develop
+    ../virt_yabibe/bin/python setup.py develop
     popd
 
     echo "Install yabish"
@@ -146,7 +147,7 @@ function startyabibe() {
     mkdir -p ~/.yabi/run/backend/tasklets
     mkdir -p ~/.yabi/run/backend/temp
 
-    virt_yabiadmin/bin/yabibe --pidfile=yabibe-yabictl.pid
+    virt_yabibe/bin/yabibe --pidfile=yabibe-yabictl.pid
 }
 
 function start() {
