@@ -148,7 +148,7 @@ class FSResource(resource.Resource, BackendResource):
         
         return self.GetBackend(linkscheme).ln(hostname,target=targetaddress.path,link=linkaddress.path,port=port, username=username, yabiusername=yabiusername, creds=creds, priority=priority)
 
-    def lcopy(self, src, dst, recurse, yabiusername=None, creds={}, priority=0):
+    def lcopy(self, src, dst, recurse=True, yabiusername=None, creds={}, priority=0):
         srcscheme, srcaddress = parse_url(src)
         dstscheme, dstaddress = parse_url(dst)
         
