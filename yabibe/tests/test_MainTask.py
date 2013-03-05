@@ -77,6 +77,10 @@ class MainTaskTestSuite(unittest.TestCase):
             os.system("sudo rm -rf '%s'"%self.testdir)
         os.makedirs(self.testdir)
         os.chmod(self.testdir,0777)
+
+        #make sure paramiko ssh script doesn't ask admin for known hosts
+        os.environ['CHECK_KNOWN_HOSTS']="True"
+
         self.task = MainTask()
     
     def tearDown(self):
@@ -202,7 +206,7 @@ class MainTaskTestSuite(unittest.TestCase):
                 "fsbackend":"localfs://localhost/tmp/test-yabi-working-directory",
                 # TODO: the trailing output directory here shouldnt be passed in by yabiadmin
                 # we created the 'output' so we should know about it and append it to the URI
-                "workingdir":"/tmp/test-yabi-working-directory/output"
+                "workingdir":"/tmp/test-yabi-working-directory/"
             }
         }
 
