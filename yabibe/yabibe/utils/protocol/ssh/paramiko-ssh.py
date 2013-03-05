@@ -42,7 +42,9 @@ BLOCK_SIZE = 512
 
 KNOWN_HOSTS_FILE = "~/.ssh/known_hosts"
 
-CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', False)
+# if true, we check against a local .ssh known hosts file
+# if false, we load the known hosts from admin
+CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', "false").lower() == "true"
 
 DEBUG = False
 

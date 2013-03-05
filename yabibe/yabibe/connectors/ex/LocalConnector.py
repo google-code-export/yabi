@@ -192,10 +192,10 @@ class LocalConnector(ExecConnector):
             sub.render(submission_data)
             
             outstream = CompositeStream(
-                            io.FileIO(os.path.join(working, submission_data["stdout"]), "w"),
+                            io.FileIO(submission_data["stdout"], "w"),
                             StreamLogger(lambda x: log("submission script stdout:"+x)))
             errstream = CompositeStream(
-                            io.FileIO(os.path.join(working, submission_data["stderr"]), "w"),
+                            io.FileIO(submission_data["stderr"], "w"),
                             StreamLogger(lambda x: log("submission script stderr:"+x)))
             
             if len(sub.render().strip()):
