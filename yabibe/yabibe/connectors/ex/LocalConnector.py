@@ -159,20 +159,6 @@ class CompositeStream(object):
 class LocalConnector(ExecConnector):
     delay = 0.1
     
-    #"command":command,
-                    #"working":working,
-                    #"stdout":stdout,
-                    #"stderr":stderr,
-                    #"walltime":walltime,
-                    #"memory":memory,
-                    #"cpus":cpus,
-                    #"queue":queue,
-                    #"jobtype":jobtype, 
-                    #"modules":modules,
-                    #"tasknum":tasknum,
-                    #"tasktotal":tasktotal
-    
-    #def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
     def run(self, yabiusername, working, submission, submission_data, state, jobid, info, log):
         """runs a command through the Local execution backend. Callbacks for status/logging.
         
@@ -192,10 +178,10 @@ class LocalConnector(ExecConnector):
             sub.render(submission_data)
             
             outstream = CompositeStream(
-                            io.FileIO(submission_data["stdout"], "w"),
+                            io.FileIO(os.path.join(working,submission_data["stdout"]), "w"),
                             StreamLogger(lambda x: log("submission script stdout:"+x)))
             errstream = CompositeStream(
-                            io.FileIO(submission_data["stderr"], "w"),
+                            io.FileIO(os.path.join(working,submission_data["stderr"]), "w"),
                             StreamLogger(lambda x: log("submission script stderr:"+x)))
             
             if len(sub.render().strip()):
