@@ -20,7 +20,7 @@ DEFAULT_GET_PRIORITY = 1
 
 DOWNLOAD_BLOCK_SIZE = 8192
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     def debug(*args, **kwargs):

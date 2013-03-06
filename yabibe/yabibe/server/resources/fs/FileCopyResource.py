@@ -18,7 +18,7 @@ PROCESS_CHECK_TIME = 0.01
 
 DEFAULT_COPY_PRIORITY = 1                   # not immediate by default but high priority
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     def debug(*args, **kwargs):

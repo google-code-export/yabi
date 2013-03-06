@@ -8,7 +8,7 @@ from yabibe.conf import config
 from yabibe.utils.FifoPool import Fifos
 
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     def debug(*args, **kwargs):

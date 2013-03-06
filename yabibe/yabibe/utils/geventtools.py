@@ -19,10 +19,12 @@ from CallbackHTTPClient import CallbackHTTPClient, CallbackHTTPClientFactory, Ca
 from RememberingHTTPClient import RememberingHTTPClient, RememberingHTTPClientFactory, RememberingHTTPDownloader
 from yabibe.server.ServerContextFactory import ServerContextFactory
 
-DEBUG = True
+DEBUG = False
 
 def debug(*args, **kwargs):
-    sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
+    if DEBUG:
+        import sys
+        sys.stderr.write("debug("+",".join([str(a) for a in args])+",".join(["%s=%s"%(k,kwargs[k]) for k in kwargs])+")\n")
 
 from yabibe.conf import config
 

@@ -8,6 +8,11 @@ from yabibe.conf import config
 
 DEBUG = False
 
+import sys
+def debug(*args, **kwargs):
+    if DEBUG:
+        sys.stderr.write("debug<%s>\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+
 def convert_filename_to_encoded_for_echo(filename):
     """This function takes a filename, and encodes the whole thing to a back ticked eval command.
     This enables us to completely encode a full filename across ssh without any nasty side effects from special characters"""
@@ -30,19 +35,17 @@ class SSHShell(BaseShell):
 
     def execute(self, certfile, host, command, username, password, port=None):
         """Spawn a process to run a remote ssh job. return the process handler"""
-        if DEBUG:
-            print "CERTFILE:",certfile
-            print "HOST:",host
-            print "COMMAND:",command
-            print "USERNAME:",username
-            print "PASSWORD:","*"*len(password)
+        debug("execute")
+        debug("CERTFILE:",certfile)
+        debug("HOST:",host)
+        debug("COMMAND:",command)
+        debug("USERNAME:",username)
+        debug("PASSWORD:","*"*len(password))
         
         subenv = self._make_env()
         subenv['YABIADMIN'] = config.yabiadmin
         subenv['HMAC'] = config.config['backend']['hmackey']
         subenv['SSL_CERT_CHECK'] = str(config.config['backend']['admin_cert_check'])
-        if self.check_knownhosts:
-            subenv['CHECK_KNOWNHOSTS'] = "1"
         
         sshcommand = [self.python, self.ssh_exec ]
         sshcommand += ["-i",certfile] if certfile else []
@@ -51,20 +54,19 @@ class SSHShell(BaseShell):
         sshcommand += ["-H",host] if host else []
         sshcommand.extend( [ "-x", " ".join(command) ] )
         
-        if DEBUG:
-            print "SSHShell Running:",sshcommand
+        debug("SSHShell Running:",sshcommand)
                 
         return BaseShell.execute(self,SSHExecProcessProtocolParamiko(),sshcommand, subenv)
 
     def execute_list(self, certfile, host, path, username, password, recurse=False, port=None):
         """Spawn a process to run a remote ssh job. return the process handler"""
-        if DEBUG:
-            print "CERTFILE:",certfile
-            print "HOST:",host
-            print "USERNAME:",username
-            print "PASSWORD:","*"*len(password)
-            print "RECURSE:",recurse
-            print "PATH:",path
+        debug("execute_list")
+        debug("CERTFILE:",certfile)
+        debug("HOST:",host)
+        debug("USERNAME:",username)
+        debug("PASSWORD:","*"*len(password))
+        debug("RECURSE:",recurse)
+        debug("PATH:",path)
         
         subenv = self._make_env()
         
@@ -79,8 +81,7 @@ class SSHShell(BaseShell):
         sshcommand += ["-H",host] if host else []
         sshcommand.extend( [ "-F" if recurse else "-f", path ] )
         
-        if DEBUG:
-            print "SSHShell Running:",sshcommand
+        debug("SSHShell Running:",sshcommand)
          
         
         return BaseShell.execute(self,SSHExecProcessProtocolParamiko(),sshcommand,subenv)

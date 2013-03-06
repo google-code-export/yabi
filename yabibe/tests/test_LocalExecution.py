@@ -25,9 +25,12 @@ from yabibe.exceptions import CredentialNotFound, IsADirectory, PermissionDenied
 
 from twisted.internet import reactor
 
+DEBUG = False
+
 def debug(*args, **kwargs):
-    import sys
-    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+    if DEBUG:
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
 def make_conf(conf):
     output = []

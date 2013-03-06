@@ -10,7 +10,7 @@ from yabibe.utils.parsers import parse_url
 import traceback
 from yabibe.exceptions import BlockingException
 
-DEBUG = True
+DEBUG = False
 
 if DEBUG:
     def debug(*args, **kwargs):
