@@ -6,9 +6,8 @@
 #
 source virt_yabiadmin/bin/activate
 
-if [ "$YABI_CONFIG" = "" ]; then
-    YABI_CONFIG="test_mysql"
-fi
+# This makes the following case redundant
+YABI_CONFIG="test_mysql"
 
 case $YABI_CONFIG in
 test_mysql)
@@ -36,6 +35,7 @@ python -c "import $DJANGO_SETTINGS_MODULE"
 echo "DJANGO_SETTINGS_MODULE: $DJANGO_SETTINGS_MODULE"
 
 ./yabictl.sh stop
+./yabictl.sh dropdb
 ./yabictl.sh start
 
 nosetests $@
