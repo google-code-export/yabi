@@ -7,7 +7,7 @@
 source virt_yabiadmin/bin/activate
 
 # This makes the following case redundant
-YABI_CONFIG="test_mysql"
+export YABI_CONFIG="test_mysql"
 
 case $YABI_CONFIG in
 test_mysql)
