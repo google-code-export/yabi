@@ -12,27 +12,36 @@ if [ "$YABI_CONFIG" = "" ]; then
     YABI_CONFIG="dev_mysql"
 fi
 
-case $YABI_CONFIG in
-test_mysql)
-    export DJANGO_SETTINGS_MODULE="yabiadmin.testmysqlsettings"
-    ;;
-dev_mysql)
-    export DJANGO_SETTINGS_MODULE="yabiadmin.settings"
-    ;;
-dev_postgres)
-    export DJANGO_SETTINGS_MODULE="yabiadmin.postgresqlsettings"
-    ;;
-quickstart)
-    echo "Can't use yabictl.sh with quickstart"
-    exit 1
-    ;;
-*)
-    echo "No YABI_CONFIG set, exiting"
-    exit 1
-esac
+function settings() {
+    case $YABI_CONFIG in
+    test_mysql)
+        export DJANGO_SETTINGS_MODULE="yabiadmin.testmysqlsettings"
+        ;;
+    dev_mysql)
+        export DJANGO_SETTINGS_MODULE="yabiadmin.settings"
+        ;;
+    dev_postgres)
+        export DJANGO_SETTINGS_MODULE="yabiadmin.postgresqlsettings"
+        ;;
+    quickstart)
+        echo "Can't use yabictl.sh with quickstart"
+        exit 1
+        ;;
+    *)
+        echo "No YABI_CONFIG set, exiting"
+        exit 1
+    esac
 
-echo "Config: $YABI_CONFIG"
-echo 
+    echo "Config: $YABI_CONFIG"
+}
+
+function nose() {
+    virt_yabiadmin/bin/nosetests -v -w yabitests
+}
+
+function nose_collect() {
+    virt_yabiadmin/bin/nosetests -v -w yabitests --collect-only
+}
 
 function dropdb() {
 
@@ -103,10 +112,10 @@ function stopyabibe() {
     echo "no pid file for yabibe"
 }
 
-function stop() {
-    stopyabibe
-    stopceleryd
+function stopall() {
     stopyabiadmin
+    stopceleryd
+    stopyabibe
 }
 
 function install() {
@@ -179,7 +188,7 @@ function startyabibe() {
     virt_yabibe/bin/yabibe --pidfile=yabibe-yabictl.pid
 }
 
-function start() {
+function startall() {
     startyabiadmin
     startceleryd
     startyabibe
@@ -210,45 +219,66 @@ function clean() {
 }
 
 case $ARGV in
+test_mysql)
+    YABI_CONFIG="test_mysql"
+    settings
+    stopall
+    dropdb
+    startall
+    nose
+    stop
+    ;;
 dropdb)
+    settings
     dropdb
     ;;
 stopyabiadmin)
+    settings
     stopyabiadmin
     ;;
 stopyabibe)
+    settings
     stopyabibe
     ;;
 stopceleryd)
+    settings
     stopceleryd
     ;;
-stop)
-    stop
+stopall)
+    settings
+    stopall
     ;;
 startyabiadmin)
+    settings
     startyabiadmin
     ;;
 startyabibe)
+    settings
     startyabibe
     ;;
 startceleryd)
+    settings
     startceleryd
     ;;
-start)
-    start
+startall)
+    settings
+    startall
     ;;
 status)
+    settings
     status
     ;;
 install)
-    stop
+    settings
+    stopall
     install
     ;;
 clean)
-    stop
+    settings
+    stopll
     clean 
     ;;
 *)
-    echo "Usage ./yabictl.sh (status|dropdb|start|startyabibe|startyabiadmin|startceleryd|stop|stopyabibe|stopyabiadmin|stopceleryd|install|clean)"
+    echo "Usage ./yabictl.sh (status|test_mysql|dropdb|startall|startyabibe|startyabiadmin|startceleryd|stopall|stopyabibe|stopyabiadmin|stopceleryd|install|clean)"
 esac
 
