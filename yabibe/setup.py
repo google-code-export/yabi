@@ -33,7 +33,7 @@ setup(name='yabibe',
     install_requires=[
         'pyOpenSSL==0.13',
         'pycrypto==2.3',
-        'paramiko',
+        'paramiko==1.7.7.1-fifopatch2',
         'Mako==0.7.3',
         'MarkupSafe',
         'TwistedWeb2==1.0.0',
@@ -56,7 +56,7 @@ setup(name='yabibe',
     ],
     dependency_links = [
           "http://repo.ccgapps.com.au",
-          "http://yabi.googlecode.com/files/paramiko-1.7.7.1-fifopatch.tar.gz",
+          "http://yabi.googlecode.com/files/paramiko-1.7.7.1-fifopatch2.tar.gz",
           "https://twisted-web2.googlecode.com/files/TwistedWeb2-1.0.0.tar.gz?"    # see: http://stackoverflow.com/questions/2653410/project-hosting-on-google-code-files-are-cached
     ],      
 )
