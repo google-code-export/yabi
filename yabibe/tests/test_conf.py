@@ -190,17 +190,6 @@ class ConfTestSuite(unittest.TestCase):
 
         self.assertEquals( c.config['backend']['temp'], 'somestring' )
 
-    def test_read_config_with_nonexisting_searchpath(self):
-        """test that search path works to find config file"""
-        search_path_falsies = ['/notexist','/home/bah','/home','/usr']
-        c = Configuration()
-        
-        self.assertRaises(
-            IOError,
-            c.read_config,
-            search_path_falsies
-        )
-
     def test_read_from_file_thats_missing(self):
         missing = "/bdfb/df/bfd/b/fd/fdbfdb.conf"
         c = Configuration()
