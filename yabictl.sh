@@ -34,6 +34,32 @@ esac
 echo "Config: $YABI_CONFIG"
 echo 
 
+function dropdb() {
+
+    case $YABI_CONFIG in
+    test_mysql)
+        mysql -v -uroot -e "drop database test_yabi; create database test_yabi;"
+        ;;
+    dev_mysql)
+	echo "Drop the dev database manually:"
+        echo "mysql -uroot -e \"drop database dev_yabi; create database dev_yabi;\""
+        exit 1
+        ;;
+    dev_postgres)
+	echo "Drop the dev database manually:"
+        echo "psql -aeE -U postgres -c \"SELECT pg_terminate_backend(pg_stat_activity.procpid) FROM pg_stat_activity where pg_stat_activity.datname = 'dev_yabi'\" && psql -aeE -U postgres -c \"alter user yabminapp createdb;\" template1 && psql -aeE -U yabminapp -c \"drop database dev_yabi\" template1 && psql -aeE -U yabminapp -c \"create database dev_yabi;\" template1"
+        exit 1
+        ;;
+    quickstart)
+        echo "Can't use yabictl.sh with quickstart"
+        exit 1
+        ;;
+    *)
+        echo "No YABI_CONFIG set, exiting"
+        exit 1
+    esac
+}
+
 function stopyabiadmin() {
     if test -e yabiadmin-yabictl.pid; then
         while test -e yabiadmin-yabictl.pid
@@ -184,6 +210,9 @@ function clean() {
 }
 
 case $ARGV in
+dropdb)
+    dropdb
+    ;;
 stopyabiadmin)
     stopyabiadmin
     ;;
@@ -220,6 +249,6 @@ clean)
     clean 
     ;;
 *)
-    echo "Usage ./yabictl.sh (status|start|startyabibe|startyabiadmin|startceleryd|stop|stopyabibe|stopyabiadmin|stopceleryd|install|clean)"
+    echo "Usage ./yabictl.sh (status|dropdb|start|startyabibe|startyabiadmin|startceleryd|stop|stopyabibe|stopyabiadmin|stopceleryd|install|clean)"
 esac
 
