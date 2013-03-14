@@ -13,6 +13,9 @@ if [ "$YABI_CONFIG" = "" ]; then
 fi
 
 case $YABI_CONFIG in
+test_mysql)
+    export DJANGO_SETTINGS_MODULE="yabiadmin.testmysqlsettings"
+    ;;
 dev_mysql)
     export DJANGO_SETTINGS_MODULE="yabiadmin.settings"
     ;;
