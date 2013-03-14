@@ -39,6 +39,7 @@ function settings() {
 }
 
 function nose() {
+    source virt_yabiadmin/bin/activate
     virt_yabiadmin/bin/nosetests -v -w yabitests
     #virt_yabiadmin/bin/nosetests -v -w yabitests yabitests.backend_restart_tests
 }
