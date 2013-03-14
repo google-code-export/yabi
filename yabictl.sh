@@ -118,7 +118,7 @@ function stopall() {
     stopyabibe
 }
 
-function install() {
+function yabiinstall() {
     # check requirements
     which virtualenv >/dev/null
 
@@ -194,7 +194,7 @@ function startall() {
     startyabibe
 }
 
-function status() {
+function yabistatus() {
     set +e
     if test -e yabibe-yabictl.pid; then
         ps -f -p `cat yabibe-yabictl.pid`
@@ -213,7 +213,7 @@ function status() {
     fi
 }
 
-function clean() {
+function yabiclean() {
     echo "rm -rf ~/.yabi/run/backend"
     rm -rf ~/.yabi/run/backend
 }
@@ -226,7 +226,7 @@ test_mysql)
     dropdb
     startall
     nose
-    stop
+    stopall
     ;;
 dropdb)
     settings
@@ -265,18 +265,17 @@ startall)
     startall
     ;;
 status)
-    settings
-    status
+    yabistatus
     ;;
 install)
     settings
     stopall
-    install
+    yabiinstall
     ;;
 clean)
     settings
-    stopll
-    clean 
+    stopall
+    yabiclean 
     ;;
 *)
     echo "Usage ./yabictl.sh (status|test_mysql|dropdb|startall|startyabibe|startyabiadmin|startceleryd|stopall|stopyabibe|stopyabiadmin|stopceleryd|install|clean)"
