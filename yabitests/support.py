@@ -162,6 +162,7 @@ def shell_command(command):
         print 'STDERR was: \n' + err
         raise StandardError('shell_command failed (%s)'%command)
 
+import sys
 class YabiTestCase(unittest.TestCase):
     TIMEOUT = conf.timeout
 
@@ -172,11 +173,6 @@ class YabiTestCase(unittest.TestCase):
         return self.__module__ + '.' + self.__class__.__name__
 
     def setUp(self):
-        shell_command(conf.stopyabi)
-        shell_command(conf.cleanyabi)
-        shell_command(conf.dbrebuild)
-        shell_command(conf.startyabi)
-        shell_command(conf.yabistatus)
         self.yabi = self.runner()
         self.yabi.set_timeout(self.TIMEOUT)
         self.yabi.login()
@@ -184,9 +180,6 @@ class YabiTestCase(unittest.TestCase):
     def tearDown(self):
         self.yabi.logout()
         self.yabi.purge()
-        shell_command(conf.stopyabi)
-        shell_command(conf.yabistatus)
-        shell_command(conf.cleanyabi)
 
 class FileUtils(object):
     def setUp(self):
