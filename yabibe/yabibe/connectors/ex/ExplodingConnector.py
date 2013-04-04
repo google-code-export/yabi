@@ -72,7 +72,7 @@ possible_delay_sets = [
              
          
 class ExplodingConnector(ExecConnector):    
-    def run(self, yabiusername, working, submission, submission_data, state, jobid, info, log):
+    def run(self, yabiusername, submission, submission_data, state, jobid, info, log):
         gevent.sleep()
         
         times = random.choice(possible_delay_sets)

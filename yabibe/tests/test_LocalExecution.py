@@ -142,12 +142,12 @@ class LocalExecutionTestSuite(unittest.TestCase):
                 log = MagicMock()
                 
                 res = self.localex.run( tc['username'],
-                                      working='/tmp',
                                       submission='${command}\n',
                                       submission_data={
                                           'command':'hostname',
                                           'stdout':'STDOUT.txt',
-                                          'stderr':'STDERR.txt'
+                                          'stderr':'STDERR.txt',
+                                          'working': '/tmp',
                                       },
                                       state=state,
                                       jobid=jobid,
@@ -195,11 +195,13 @@ class LocalExecutionTestSuite(unittest.TestCase):
                 log = MagicMock()
                 
                 res = self.localex.run( tc['username'],
-                                      working='/tmp',
                                       submission='${command} 1>${stdout} 2>${stderr}\n',
-                                      submission_data={'command':'hostname',
-                                                       'stdout':'/tmp/yabi-test-stdout.txt',
-                                                       'stderr':'/tmp/yabi-test-stderr.txt'},
+                                      submission_data={
+                                          'command':'hostname',
+                                          'stdout':'/tmp/yabi-test-stdout.txt',
+                                          'stderr':'/tmp/yabi-test-stderr.txt',
+                                          'working': '/tmp',
+                                      },
                                       state=state,
                                       jobid=jobid,
                                       info=lambda x: None,
