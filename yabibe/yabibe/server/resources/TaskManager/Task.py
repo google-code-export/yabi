@@ -534,7 +534,7 @@ class MainTask(Task):
                     debug("WORKING DIR:",outputdir)
                     
                     debug(callfunc,"(",uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change,")")
-                    callfunc( uri, self.yabiusername, outputdir, self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )                 # this now blocks until its success or failure
+                    callfunc( uri, self.yabiusername, self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )                 # this now blocks until its success or failure
                     
                     if filter(lambda s: 'error' in s, self.exec_status):
                         print "TASK[%s]: Execution failed!"%(self.taskid)
