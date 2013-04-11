@@ -108,7 +108,7 @@ class LocalExecutionShell(object):
         return subprocess
 
 class LocalRun(LocalExecutionShell):
-    def run(self,working, submission, submission_stdout, submission_stderr):
+    def run(self, working, submission, submission_stdout, submission_stderr):
         """spawn a local task.
         run it in working directory 'working'
         run submission script in a shell
@@ -159,7 +159,7 @@ class CompositeStream(object):
 class LocalConnector(ExecConnector):
     delay = 0.1
     
-    def run(self, yabiusername, working, submission, submission_data, state, jobid, info, log):
+    def run(self, yabiusername, submission, submission_data, state, jobid, info, log):
         """runs a command through the Local execution backend. Callbacks for status/logging.
         
         state: callback to set task state
@@ -168,6 +168,7 @@ class LocalConnector(ExecConnector):
         log: callback for log messages to go to admin
         """
         try:
+            working = submission_data['working']
             debug("calling state!",state)
             state("Unsubmitted")
             gevent.sleep(self.delay)
