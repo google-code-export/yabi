@@ -95,6 +95,9 @@ class ExecRunResource(resource.PostableResource):
         submission_data.update(
             {
                 "command":command,
+                "scheme": scheme,
+                "username": username,
+                "hostname": hostname,
                 "stdout":"STDOUT.txt",
                 "stderr":"STDERR.txt"
             }
