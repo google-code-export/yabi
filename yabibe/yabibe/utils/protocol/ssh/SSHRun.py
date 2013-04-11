@@ -65,15 +65,15 @@ class SSHRun(BaseShell):
         debug("COMMAND:",command)
             
         # hande log setting
-        if config.config['execution']['logcommand']:
+        #if config.config['execution']['logcommand']:
             # screen out password from the command
-            command_log = command[:]
-	    if "-p" in command_log:
-        	index = command_log.index("-p")+1
-        	command_log[index]="*"*len(command_log[index])
-            print "ssh running command: "+str(command_log)
+        #    command_log = command[:]
+	    #if "-p" in command_log:
+        # 	index = command_log.index("-p")+1
+        #	command_log[index]="*"*len(command_log[index])
+        #    print "ssh running command: "+str(command_log)
             
-        if config.config['execution']['logscripts']:
-            print "ssh attempting remote command: "+remote_command
+        #if config.config['execution']['logscripts']:
+        #    print "ssh attempting remote command: "+remote_command
             
         return BaseShell.execute(self,SSHExecProcessProtocolParamiko(streamin),command,subenv)

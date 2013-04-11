@@ -498,7 +498,7 @@ def RemoteInfo(statuspath, message):
         code,msg,data = RetryPOST(statuspath, scheme=config.yabiadminscheme, host=config.yabiadminserver,port=config.yabiadminport, remote_info=message)              # error exception should bubble up and be caught
     assert code==200
 
-def Exec( uri, yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
+def Exec( uri, yabiusername, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
     #uri, submission_script, submission_vars, yabiusername, working, status, taskid):
     """execute a job on a backend"""
     scheme, address = parse_url(uri)
@@ -515,10 +515,10 @@ def Exec( uri, yabiusername, working, submission, submission_data, state_cb, job
 
     debug(submission_data)
 
-    result = bend.run( yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
+    result = bend.run( yabiusername, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
     debug("bend.run result:",result)
 
-def Resume( uri, yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
+def Resume( uri, yabiusername, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb):
     #uri, submission_script, submission_vars, yabiusername, working, status, taskid):
     """execute a job on a backend"""
     scheme, address = parse_url(uri)
@@ -535,7 +535,7 @@ def Resume( uri, yabiusername, working, submission, submission_data, state_cb, j
 
     debug(submission_data)
 
-    result = bend.resume( yabiusername, working, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
+    result = bend.resume( yabiusername, submission, submission_data, state_cb, jobid_cb, info_cb, log_cb )
     debug("bend.run result:",result)
     
 def UserCreds(yabiusername, uri, credtype="fs"):
