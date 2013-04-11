@@ -9,6 +9,14 @@ from yabibe.utils.FifoPool import Fifos
 
 
 DEBUG = False
+
+if DEBUG:
+    def debug(*args, **kwargs):
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+else:
+    def debug(*args, **kwargs):
+        pass
         
 class SCPError(Exception):
     pass

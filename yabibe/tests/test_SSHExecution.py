@@ -75,6 +75,7 @@ class SSHExecutionTestSuite(unittest.TestCase):
         try:
             reactor.startRunning()
         except Exception:
+            raise
             pass
         while self._run:
             if reactor.doInner():
@@ -124,7 +125,7 @@ class SSHExecutionTestSuite(unittest.TestCase):
         self.reactor_run(thread)
 
     @patch.dict('yabibe.conf.config.config', {'backend':{'admin':'http://localhost:8000/','hmackey':'dummyhmac','admin_cert_check':False}} )
-    def ntest_run_basic(self):
+    def test_run_basic(self):
         def threadlet():
             try:
                 # issue a run
@@ -134,21 +135,40 @@ class SSHExecutionTestSuite(unittest.TestCase):
                          'username':tc['username'],
                          'password':tc['password'] }
                 
-                res = self.sshex.run( tc['username'],
-                                      creds=creds,
-                                      command='hostname',
-                                      working='/tmp',
-                                      scheme='ignored',
-                                      username=tc['username'],
-                                      host='localhost',
-                                      remoteurl='dummy',
-                                      channel=None,
-                                      submission=None )
+                jobid = MagicMock()
+                state = MagicMock()
+                log = MagicMock()
 
-                debug(res)
+                res = self.sshex.run( tc['username'],
+                                      submission='${command}\n',
+                                      submission_data={
+                                          'creds': creds,
+                                          'username': tc['username'],
+                                          'hostname': 'localhost',
+                                          'command':'hostname',
+                                          'stdout':'STDOUT.txt',
+                                          'stderr':'STDERR.txt',
+                                          'working': '/tmp',
+                                      },
+                                      state=state,
+                                      jobid=jobid,
+                                      info=lambda x: None,
+                                      log=log )  
+
+                # job id should be called once, with a PID
+                #self.assertEquals(jobid.call_count, 1)
+                #pid = int(jobid.call_args[0][0])
+                #self.assertTrue(pid>0 and pid<66000)
+
+                # make sure all the updates were called in order
+                expected_order = [ 'unsubmitted', 'pending', 'running', 'done' ]
+                for call,expected in zip(state.call_args_list, expected_order):
+                    self.assertEquals( call[0][0].lower(), expected )
+
 
             finally:
                 self.reactor_stop()
 
         thread = gevent.spawn(threadlet)
         self.reactor_run(thread)
+

@@ -25,9 +25,12 @@ from yabibe.exceptions import CredentialNotFound, IsADirectory, PermissionDenied
 
 from twisted.internet import reactor
 
+DEBUG = False
+
 def debug(*args, **kwargs):
-    import sys
-    sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
+    if DEBUG:
+        import sys
+        sys.stderr.write("debug(%s)\n"%(','.join([str(a) for a in args]+['%s=%r'%tup for tup in kwargs.iteritems()])))
 
 def make_conf(conf):
     output = []
@@ -139,9 +142,13 @@ class LocalExecutionTestSuite(unittest.TestCase):
                 log = MagicMock()
                 
                 res = self.localex.run( tc['username'],
-                                      working='/tmp',
                                       submission='${command}\n',
-                                      submission_data={'command':'hostname'},
+                                      submission_data={
+                                          'command':'hostname',
+                                          'stdout':'STDOUT.txt',
+                                          'stderr':'STDERR.txt',
+                                          'working': '/tmp',
+                                      },
                                       state=state,
                                       jobid=jobid,
                                       info=lambda x: None,
@@ -160,7 +167,8 @@ class LocalExecutionTestSuite(unittest.TestCase):
                 # check log messages appeared somewhere
                 from socket import gethostname
                 expected_somewhere = [ 'rendered submission script is:\nhostname\n',
-                                       'sub out:%s\n'%gethostname() ]
+                                       'submission script stdout:%s\n'%gethostname() ]
+                debug(log.call_args_list)
                 for call in log.call_args_list:
                     expected_somewhere.remove(call[0][0])
                 self.assertFalse( expected_somewhere )
@@ -187,11 +195,13 @@ class LocalExecutionTestSuite(unittest.TestCase):
                 log = MagicMock()
                 
                 res = self.localex.run( tc['username'],
-                                      working='/tmp',
                                       submission='${command} 1>${stdout} 2>${stderr}\n',
-                                      submission_data={'command':'hostname',
-                                                       'stdout':'/tmp/yabi-test-stdout.txt',
-                                                       'stderr':'/tmp/yabi-test-stderr.txt'},
+                                      submission_data={
+                                          'command':'hostname',
+                                          'stdout':'/tmp/yabi-test-stdout.txt',
+                                          'stderr':'/tmp/yabi-test-stderr.txt',
+                                          'working': '/tmp',
+                                      },
                                       state=state,
                                       jobid=jobid,
                                       info=lambda x: None,

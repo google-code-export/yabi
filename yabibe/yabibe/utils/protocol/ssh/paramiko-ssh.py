@@ -42,8 +42,9 @@ BLOCK_SIZE = 512
 
 KNOWN_HOSTS_FILE = "~/.ssh/known_hosts"
 
-CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', False)
-CHECK_KNOWN_HOSTS = True
+# if true, we check against a local .ssh known hosts file
+# if false, we load the known hosts from admin
+CHECK_KNOWN_HOSTS = os.environ.get('CHECK_KNOWN_HOSTS', "false").lower() == "true"
 
 DEBUG = False
 
@@ -331,7 +332,10 @@ def transport_connect_login(options, known_hosts):
         try:
             mykey = get_rsa_key(options)
         except paramiko.SSHException, pe:
-            mykey = get_dsa_key(options)
+            try:
+                mykey = get_dsa_key(options)
+            except paramiko.SSHException, pe:
+                raise paramiko.SSHException("Invalid key. Tried it as an RSA and DSA key and it was neither.")
         
         ssh.connect(username=options.username, pkey=mykey)
         

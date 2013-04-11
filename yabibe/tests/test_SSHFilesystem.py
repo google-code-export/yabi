@@ -63,6 +63,9 @@ class SSHFilesystemTestSuite(unittest.TestCase):
             os.system("sudo rm -rf '%s'"%self.testdir)
         os.makedirs(self.testdir)
         os.chmod(self.testdir,0777)
+
+        os.environ['CHECK_KNOWN_HOSTS']='true'
+        
         self.sshfs = SSHFilesystem.SSHFilesystem()
     
     def tearDown(self):
@@ -80,7 +83,7 @@ class SSHFilesystemTestSuite(unittest.TestCase):
 
     def test_Creds(self):
         # pass in creds and make sure we get them back
-        self.assertEquals( self.sshfs.Creds( 'yabiusername', {1:1,2:2}, None ), {1:1, 2:2} )
+        self.assertEquals( self.sshfs.Creds( 'yabiusername', {1:1,2:2}, "ssh://localhost/dummy/uri" ), {1:1, 2:2} )
 
         with self.assertRaises( AssertionError ):
             self.sshfs.Creds(None,None,None)

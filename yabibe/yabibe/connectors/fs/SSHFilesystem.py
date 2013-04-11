@@ -11,7 +11,7 @@ from yabibe.exceptions import PermissionDenied, InvalidPath, IsADirectory
 from yabibe.conf import config
 from yabibe.utils.decorators import retry
 from yabibe.utils.protocol import ssh
-from yabibe.utils.TempFile import TempFile
+from yabibe.utils.TemporaryFile import TemporaryFile
 from yabibe.server.resources.TaskManager.TaskTools import UserCreds, uriify
 
 sshauth = ssh.SSHAuth.SSHAuth()
@@ -77,7 +77,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         then return the result"""
         # key login
         if 'key' in creds:
-            with TempFile(creds['key']) as tf:
+            with TemporaryFile(creds['key']) as tf:
                 pp = callable(tf.filename, *arguments, username=creds['username'], password=creds['password'], **kwarguments)
 
                 while not pp.isDone():
@@ -271,7 +271,7 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         return out
         
     #@lock
-    def GetWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
+    def GetWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0, credfilename=None):
         """sets up the chain needed to setup a write fifo from a remote path as a certain user.
         
         pass in here the username, path
@@ -284,16 +284,13 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         debug("SSHFilesystem::GetWriteFifo( host:"+host,",username:",username,",path:",path,",filename:",filename,",fifo:",fifo,",yabiusername:",yabiusername,",creds:",creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        if 'key' in creds and creds['key']:
-            # key based login
-            with TempFile(creds['key']) as tf:
-                return ssh.Copy.WriteToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
-        else:
-            # password based login
-            return ssh.Copy.WriteToRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
+
+        # if credfilename is None, this is a password login
+        # if its a TemporaryFile context manager filename, then its the file with the key stored in it
+        return ssh.Copy.WriteToRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
         
     #@lock
-    def GetReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
+    def GetReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0, credfilename=None):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user.
         
         pass in here the username, path, and a deferred
@@ -306,43 +303,40 @@ class SSHFilesystem(FSConnector.FSConnector, object):
         debug("SSH::GetReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        if 'key' in creds and creds['key']:
-            # key based login
-            with TempFile(creds['key']) as tf:
-                return ssh.Copy.ReadFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
-        else:
-            # password based login
-            return ssh.Copy.ReadFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
-            
-    def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
+
+        # if credfilename is None, this is a password login
+        # if its a TemporaryFile context manager filename, then its the file with the key stored in it
+        return ssh.Copy.ReadFromRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
+    
+    def GetCompressedReadFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0, credfilename=None):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
         debug("SSH::GetCompressedReadFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         creds = self.Creds(yabiusername, creds, dst)
-        if 'key' in creds and creds['key']:
-            # key based login
-            with TempFile(creds['key']) as tf:
-                return ssh.Copy.ReadCompressedFromRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
-        else:
-            # password based login
-            return ssh.Copy.ReadCompressedFromRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
+
+        # if credfilename is None, this is a password login
+        # if its a TemporaryFile context manager filename, then its the file with the key stored in it
+        return ssh.Copy.ReadCompressedFromRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
         
-    def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0):
+    def GetCompressedWriteFifo(self, host=None, username=None, path=None, port=22, filename=None, fifo=None, yabiusername=None, creds={}, priority=0, credfilename=None):
         """sets up the chain needed to setup a read fifo from a remote path as a certain user that streams in a compressed file archive"""
         debug("SSH::GetCompressedWriteFifo(",host,username,path,filename,fifo,yabiusername,creds,")")
         dst = "%s@%s:%s"%(username,host,os.path.join(path,filename))
         debug(dst)
         creds = self.Creds(yabiusername, creds, dst)
-        if 'key' in creds and creds['key']:
-            # key based login
-            with TempFile(creds['key']) as tf:
-                return ssh.Copy.WriteCompressedToRemote(tf.filename,dst,port=port,password=creds['password'],fifo=fifo)
-        else:
-            # password based login
-            return ssh.Copy.WriteCompressedToRemote(None,dst,port=port,password=creds['password'],fifo=fifo)
 
+        # if credfilename is None, this is a password login
+        # if its a TemporaryFile context manager filename, then its the file with the key stored in it
+        return ssh.Copy.WriteCompressedToRemote(credfilename,dst,port=port,password=creds['password'],fifo=fifo)
+        
     def Creds(self, yabiusername, creds, uri):
         assert yabiusername or creds, "You must either pass in a credential or a yabiusername so I can go get a credential. Neither was passed in"
+        debug("Creds:",yabiusername, creds=creds, uri=uri)
+
+        #TODO: remove this nasty hack and unify the uris. Some uris are being passed in here without the schema. all should probably have schema
+        if not uri.startswith(SCHEMA+"://"):
+            uri = SCHEMA+"://"+uri
+        
         return creds or UserCreds( yabiusername, uri, credtype="fs")
 
     def URI(self,user,hostname,port=None,path=None):

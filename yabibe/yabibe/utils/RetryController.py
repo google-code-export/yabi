@@ -9,7 +9,7 @@ HARD = 1
 SOFT = 0
 
 # switch on syslog debugging
-DEBUG = True
+DEBUG = False
 
 import re
 
