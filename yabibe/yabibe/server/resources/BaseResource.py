@@ -35,9 +35,9 @@ class BaseResource(resource.PostableResource):
         ## from yabibe.connectors.ex.SSHConnector import SSHConnector
         ## from yabibe.connectors.ex.SSHTorqueConnector import SSHTorqueConnector
         ## from yabibe.connectors.ex.SSHPbsproConnector import SSHPbsproConnector
-        ## from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
+        from yabibe.connectors.ex.SSHSGEConnector import SSHSGEConnector
         from yabibe.connectors.ex.LocalConnector import LocalConnector
-        ## from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
+        from yabibe.connectors.ex.ExplodingConnector import ExplodingConnector
         
         self.child_exec.LoadConnectors(quiet)
         

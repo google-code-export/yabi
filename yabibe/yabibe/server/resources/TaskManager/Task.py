@@ -23,14 +23,15 @@ class TaskFailed(Exception):
     pass
 
 class Task(object):
-    def __init__(self, json=None):
+    def __init__(self, data=None):
         self.blocked_stage = None
         
         # stage in file
-        if json:
-            self.load_json(json)
+        if data:
+            self.load_data(data)
 
     def load_json(self, j, stage=0):
+        debug(passed_in=j)
         return self.load_data(json.loads(j), stage) 
         
     def load_data(self, jsondata, stage=0):
@@ -194,7 +195,7 @@ class NullBackendTask(Task):
             raise BlockingException("Make directory failed: %s"%error.message[2])
         
     def stage_in_files(self):
-        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure, CloseConnections
+        from TaskTools import Copy, Ln, LCopy, RCopy, SmartCopy, Sleep, Log, Status, Exec, Resume, Mkdir, Rm, List, UserCreds, GETFailure #, CloseConnections
 
         dst = self.json['stageout']
         status = self.status
@@ -519,19 +520,21 @@ class MainTask(Task):
                     for key in [ 'cpus', 'jobtype', 'memory', 'module', 'queue', 'walltime', 'tasknum', 'tasktotal' ]:
                         if key in task['exec'] and task['exec'][key]:
                             extras[key]=task['exec'][key]
+
+                    outputdir = task['exec']['workingdir']  + ("/" if not task['exec']['workingdir'].endswith('/') else "") + "output/"
                     
                     submission_data = {
                         'command':task['exec']['command'],
                         'stdout':'STDOUT.txt',
                         'stderr':'STDERR.txt',
-                        'working':task['exec']['workingdir']
+                        'working':outputdir
                     }
                     submission_data.update(extras)
 
-                    debug("WORKING DIR:",task['exec']['workingdir'])
+                    debug("WORKING DIR:",outputdir)
                     
                     debug(callfunc,"(",uri, self.submission, submission_data, self.yabiusername, _task_status_change, _task_id_change,")")
-                    callfunc( uri, self.yabiusername, task['exec']['workingdir'], self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )                 # this now blocks until its success or failure
+                    callfunc( uri, self.yabiusername, self.submission, submission_data, _task_status_change, _task_id_change, self.log, self.log )                 # this now blocks until its success or failure
                     
                     if filter(lambda s: 'error' in s, self.exec_status):
                         print "TASK[%s]: Execution failed!"%(self.taskid)

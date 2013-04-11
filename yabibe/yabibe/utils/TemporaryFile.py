@@ -2,8 +2,8 @@
 import tempfile
 import os
 
-class TempFile(object):
-    def __init__(self, data, path=None):
+class TemporaryFile(object):
+    def __init__(self, data="", path=None):
         self.path = path
         self.data = data
 
@@ -20,6 +20,5 @@ class TempFile(object):
     def __exit__(self, exc_type, exc_value, traceback):
         """Clean up this file"""
         os.unlink(self.filename)
-
 
         

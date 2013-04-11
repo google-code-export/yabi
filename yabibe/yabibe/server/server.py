@@ -1,3 +1,6 @@
+from yabibe.reactor import GeventReactor
+GeventReactor.install()
+
 import sys, os, pwd
 
 from twisted.application import service, internet
@@ -77,7 +80,7 @@ def shutdown():
     """
     # stop TaskManager if its running
     if config.config["taskmanager"]["startup"]:
-        from resources import TaskManager
+        from yabibe.server.resources import TaskManager
         TaskManager.shutdown()
 
     # shutdown our connectors

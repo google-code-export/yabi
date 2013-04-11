@@ -1,4 +1,5 @@
-
+import io
+import os
 from yabibe.exceptions import ExecutionError
 from ExecConnector import ExecConnector
 
@@ -60,7 +61,13 @@ class LocalExecutionProcessProtocol(protocol.ProcessProtocol):
         
     def errReceived(self, data):
         self.stderr.write(data.replace("\r\n","\n") if self.unify_line_endings else data )
-    
+   
+    def outConnectionLost(self):
+        self.stdout.close()
+   
+    def errConnectionLost(self):
+        self.stderr.close()
+ 
     def processEnded(self, status_object):
         if self.cleanup:
             self.cleanup()
@@ -101,7 +108,7 @@ class LocalExecutionShell(object):
         return subprocess
 
 class LocalRun(LocalExecutionShell):
-    def run(self,working, submission, submission_stdout, submission_stderr):
+    def run(self, working, submission, submission_stdout, submission_stderr):
         """spawn a local task.
         run it in working directory 'working'
         run submission script in a shell
@@ -133,24 +140,26 @@ class StreamLogger(object):
     def write(self,string):
         self.callback(string)
 
+    def close(self):
+        pass
+
+class CompositeStream(object):
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+
+    def close(self):
+        for stream in self.streams:
+            stream.close()
+
+
 class LocalConnector(ExecConnector):
     delay = 0.1
     
-    #"command":command,
-                    #"working":working,
-                    #"stdout":stdout,
-                    #"stderr":stderr,
-                    #"walltime":walltime,
-                    #"memory":memory,
-                    #"cpus":cpus,
-                    #"queue":queue,
-                    #"jobtype":jobtype, 
-                    #"modules":modules,
-                    #"tasknum":tasknum,
-                    #"tasktotal":tasktotal
-    
-    #def run(self, yabiusername, creds, command, working, scheme, username, host, remoteurl, channel, submission, stdout="STDOUT.txt", stderr="STDERR.txt", walltime=60, memory=1024, cpus=1, queue="testing", jobtype="single", module=None,tasknum=None,tasktotal=None):
-    def run(self, yabiusername, working, submission, submission_data, state, jobid, info, log):
+    def run(self, yabiusername, submission, submission_data, state, jobid, info, log):
         """runs a command through the Local execution backend. Callbacks for status/logging.
         
         state: callback to set task state
@@ -159,6 +168,7 @@ class LocalConnector(ExecConnector):
         log: callback for log messages to go to admin
         """
         try:
+            working = submission_data['working']
             debug("calling state!",state)
             state("Unsubmitted")
             gevent.sleep(self.delay)
@@ -168,8 +178,12 @@ class LocalConnector(ExecConnector):
             sub = Submission(submission)
             sub.render(submission_data)
             
-            outstream = StreamLogger(lambda x: log("sub out:"+x))
-            errstream = StreamLogger(lambda x: log("sub err:"+x))
+            outstream = CompositeStream(
+                            io.FileIO(os.path.join(working,submission_data["stdout"]), "w"),
+                            StreamLogger(lambda x: log("submission script stdout:"+x)))
+            errstream = CompositeStream(
+                            io.FileIO(os.path.join(working,submission_data["stderr"]), "w"),
+                            StreamLogger(lambda x: log("submission script stderr:"+x)))
             
             if len(sub.render().strip()):
                 log("rendered submission script is:\n"+sub.render())
@@ -190,7 +204,7 @@ class LocalConnector(ExecConnector):
             jobid(str(pp.pid))
             
             # get env and info it
-            info(localrun.subenv)
+            info("submission script environment: %s"%localrun.subenv)
         
             while not pp.isDone():
                 gevent.sleep(self.delay)
