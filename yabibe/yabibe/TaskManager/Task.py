@@ -310,6 +310,12 @@ class MainTask(Task):
 
         self._failed = False
 
+    def to_str(self):
+        return self.__str__()
+
+    def __str__(self):
+        return "TaskId: %s, Stage: %s" % (self.taskid, self.stage)
+
     def load_json(self, json, stage=0):
         Task.load_json(self, json, stage)
 
@@ -506,6 +512,7 @@ class MainTask(Task):
                     line = line.strip()
                     if DEBUG:
                         print "_task_status_change(", line, ")"
+                    print "_task_status_change(", line, ")"
                     self.log("Remote execution backend sent status message: %s" % (line))
 
                     # check for job id number
@@ -513,7 +520,7 @@ class MainTask(Task):
                         key, value = line.split("=")
                         value = value.strip()
 
-                        #print "execution job given ID:",value
+                        print "execution job given ID:",value
                         self._jobid = value
                         #self.remote_id(value)                           # TODO:send this id back to the middleware
                     else:
