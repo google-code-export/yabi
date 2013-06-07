@@ -42,6 +42,7 @@ class BaseShellProcessProtocol(protocol.ProcessProtocol):
         self.exitcode = None
 
     def connectionMade(self):
+        self.pid = self.transport.pid
         # when the process finally spawns, close stdin, to indicate we have nothing to say to it
         if self.stdin:
             self.transport.write(self.stdin)
