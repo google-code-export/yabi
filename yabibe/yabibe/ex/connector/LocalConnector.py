@@ -116,10 +116,8 @@ class LocalConnector(ExecConnector):
             if DEBUG:
                 print "LOCAL", command, "WORKING:", working, "CREDS passed in:%s" % (creds)
             client_stream.write("Unsubmitted\r\n")
-            gevent.sleep(1.0)
 
             client_stream.write("Pending\r\n")
-            gevent.sleep(1.0)
 
             script_string = make_script(submission, working, command, modules, cpus, memory, walltime, yabiusername, username, host, queue, stdout, stderr, tasknum, tasktotal)
 
@@ -137,7 +135,7 @@ class LocalConnector(ExecConnector):
 
             pp = LocalRun().run(None, command, username, host, working, port="22", stdout=stdout, stderr=stderr, password=None, modules=modules)
             client_stream.write("Running\r\n")
-            gevent.sleep(1.0)
+            client_stream.write("id = %s" % pp.pid)
 
             while not pp.isDone():
                 gevent.sleep()
