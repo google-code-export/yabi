@@ -63,6 +63,7 @@ class TaskManager(object):
     TASK_PORT = int(os.environ['PORT']) if 'PORT' in os.environ else 8000
     TASK_URL = "engine/task/"
     BLOCKED_URL = "engine/blockedtask/"
+    ABORTING_URL = "engine/abortingtask/"
 
     JOBLESS_PAUSE = 5.0                 # wait this long when theres no more jobs, to try to get another job
     JOB_PAUSE = 0.0                     # wait this long when you successfully got a job, to get the next job
@@ -81,6 +82,7 @@ class TaskManager(object):
         """Begin the task manager tasklet. This tasklet continually pops tasks from yabiadmin and sets them up for running"""
         self.runner_thread_task = gevent.spawn(self.runner)
         self.runner_thread_unblock = gevent.spawn(self.unblocker)
+        self.runner_thread_abort = gevent.spawn(self.aborter)
 
     def stop(self):
         """Stop the task manager tasklets."""
@@ -106,6 +108,14 @@ class TaskManager(object):
         """green task that checks for blocked jobs that need unblocking"""
         while self.running:
             while waitForDeferred(self.get_next_unblocked()):
+                Sleep(self.JOB_PAUSE)
+
+            # wait for this task to start or fail
+            Sleep(self.JOBLESS_PAUSE)
+
+    def aborter(self):
+        while self.running:
+            while waitForDeferred(self.get_next_aborting()):
                 Sleep(self.JOB_PAUSE)
 
             # wait for this task to start or fail
@@ -162,6 +172,23 @@ class TaskManager(object):
             gevent.spawn(runner_object.run)
 
             # mark as successful so we can immediately get another
+            return True
+
+        except Exception, e:
+            # log any exception
+            traceback.print_exc()
+            raise e
+
+    def start_aborting(self, data):
+        try:
+            print "aborting start:", data
+            for task_id, task in tasklets.tasks.items():
+                if task.stage == 2: # Running
+                    break
+            if task.stage == 2:
+                print "Found task to abort: %s. Aborting task..." % task_id
+                task.abort()
+
             return True
 
         except Exception, e:
@@ -243,6 +270,46 @@ class TaskManager(object):
             #self.pausechannel_unblock.put(self.JOBLESS_PAUSE)
 
         d = factory.deferred.addCallback(self.start_unblock).addErrback(_doFailure)
+
+        if config.yabiadminscheme == 'https':
+            reactor.connectSSL(config.yabiadminserver, config.yabiadminport, factory, ServerContextFactory())
+        else:
+            reactor.connectTCP(config.yabiadminserver, config.yabiadminport, factory)
+
+        return d
+    
+    
+    def get_next_aborting(self):
+        useragent = "YabiExec/0.1"
+        task_path = os.path.join(config.yabiadminpath, self.ABORTING_URL)
+        task_tag = "?tasktag=%s" % (config.config['taskmanager']['tasktag'])
+        task_url = task_path + task_tag
+
+        if HEARTBEAT:
+            print "Getting next unblock request from:", task_url
+
+        fullpath = "%s://%s:%d%s" % (config.yabiadminscheme, config.yabiadminserver, config.yabiadminport, task_url)
+        factory = RememberingHTTPClientFactory(
+            fullpath,
+            method="GET",
+            agent=useragent,
+            connect_failed=self.connect_failed
+        )
+        factory.noisy = False
+        if VERBOSE:
+            if config.yabiadminscheme == 'https':
+                print "reactor.connectSSL(", config.yabiadminserver, ",", config.yabiadminport, ",", os.path.join(config.yabiadminpath, self.ABORTING_URL), ")"
+            else:
+                print "reactor.connectTCP(", config.yabiadminserver, ",", config.yabiadminport, ",", os.path.join(config.yabiadminpath, self.ABORTING_URL), ")"
+
+        # now if the page fails for some reason. deal with it
+        def _doFailure(data):
+            if VERBOSE:
+                print "No more unblock requests. Sleeping for", self.JOBLESS_PAUSE
+            # no more tasks. we should wait for the next task.
+            #self.pausechannel_unblock.put(self.JOBLESS_PAUSE)
+
+        d = factory.deferred.addCallback(self.start_aborting).addErrback(_doFailure)
 
         if config.yabiadminscheme == 'https':
             reactor.connectSSL(config.yabiadminserver, config.yabiadminport, factory, ServerContextFactory())

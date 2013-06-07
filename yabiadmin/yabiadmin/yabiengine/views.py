@@ -123,6 +123,11 @@ def task(request):
 def blockedtask(request):
     return request_next_task(request, status=STATUS_RESUME)
 
+@hmac_authenticated
+def abortingtask(request):
+    return HttpResponse("TODO")
+    #return request_next_task(request, status=STATUS_ABORTING)
+
 
 @hmac_authenticated
 def status(request, model, id):
