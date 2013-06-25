@@ -181,13 +181,13 @@ class TaskManager(object):
 
     def start_aborting(self, data):
         try:
-            print "aborting start:", data
+            task = None
             for task_id, task in tasklets.tasks.items():
                 if task.stage == 2: # Running
                     break
-            if task.stage == 2:
+            if task and task.stage == 2:
                 print "Found task to abort: %s. Aborting task..." % task_id
-                task.abort()
+                #task.abort()
 
             return True
 
