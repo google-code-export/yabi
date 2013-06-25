@@ -104,7 +104,7 @@ class BaseShell(object):
         subenv = environ.copy() if environ is not None else os.environ.copy()
         return subenv
 
-    def execute(self, pp, command, env=None, working="/usr/bin"):
+    def execute(self, pp, command, env=None, working="/tmp"):
         """execute a command using a process protocol"""
      
         arguments = command 
