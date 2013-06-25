@@ -51,6 +51,8 @@ from twisted.internet import reactor
 from conf import config
 from utils.BaseShell import BaseShell, BaseShellProcessProtocol
 
+from twisted.python import log
+
 TMP_DIR = config.config['backend']['temp']
 
 
@@ -60,26 +62,16 @@ class LocalRun(BaseShell):
         self.wordchars = r"-.:;/="       
 
     def run(self,
-            certfile,
-            remote_command="hostname",
-            username="yabi",
-            host="localhost.localdomain",
+            command="hostname",
             working=TMP_DIR,
-            port="22",
-            stdout="STDOUT.txt",
-            stderr="STDERR.txt",
-            password="",
-            modules=[],
             streamin=None):
         """Spawn a process to run a local job. return the process handler"""
 
-        if modules:
-            remote_command = "&&".join(["module load %s" % module for module in modules] + [remote_command])
-
         if DEBUG:
-            print "running local command:", remote_command
+            print "running local command:", command
+        log.msg("running local command: %s" % command)
 
-        return BaseShell.execute(self, BaseShellProcessProtocol(streamin), remote_command, working=working)
+        return BaseShell.execute(self, BaseShellProcessProtocol(streamin), command, working=working)
 
 
 class LocalConnector(ExecConnector):
@@ -105,37 +97,28 @@ class LocalConnector(ExecConnector):
             tasknum=None,
             tasktotal=None):
 
-        # preprocess some stuff
-        modules = [] if not module else [X.strip() for X in module.split(",")]
-
         client_stream = stream.ProducerStream()
         channel.callback(http.Response(responsecode.OK, {'content-type': http_headers.MimeType('text', 'plain')}, stream=client_stream))
-        gevent.sleep()
+        def send_status(status):
+            client_stream.write(status + "\r\n")
+
 
         try:
             if DEBUG:
                 print "LOCAL", command, "WORKING:", working, "CREDS passed in:%s" % (creds)
-            client_stream.write("Unsubmitted\r\n")
+            send_status("Unsubmitted")
+            send_status("Pending")
 
-            client_stream.write("Pending\r\n")
-
-            script_string = make_script(submission, working, command, modules, cpus, memory, walltime, yabiusername, username, host, queue, stdout, stderr, tasknum, tasktotal)
+            script_string = make_script(submission, working=working, command=command)
 
             if DEBUG:
                 print "command:", command
-                print "username:", username
-                print "host:", host
                 print "working:", working
-                print "port:", "22"
-                print "stdout:", stdout
-                print "stderr:", stderr
-                print "modules:", modules
                 print "submission script:", submission
-                print "script string:", script_string
 
-            pp = LocalRun().run(None, command, username, host, working, port="22", stdout=stdout, stderr=stderr, password=None, modules=modules)
-            client_stream.write("Running\r\n")
-            client_stream.write("id = %s" % pp.pid)
+            pp = LocalRun().run(command, working)
+            send_status("Running")
+            send_status("id = %s" % pp.pid)
 
             while not pp.isDone():
                 gevent.sleep()
@@ -149,8 +132,7 @@ class LocalConnector(ExecConnector):
 
             if pp.exitcode == 0:
                 # success
-                client_stream.write("Done\r\n")
-                client_stream.finish()
+                send_status("Done")
                 return
 
             # error
@@ -158,13 +140,14 @@ class LocalConnector(ExecConnector):
                 print "SSH Job error:"
                 print "OUT:", pp.out
                 print "ERR:", pp.err
-            client_stream.write("Error\r\n")
-            client_stream.finish()
-            return
+            send_status("Error")
 
         except Exception:
             import traceback
             traceback.print_exc()
-            client_stream.write("Error\r\n")
-            client_stream.finish()
+            send_status("Error")
             return
+        finally:
+            client_stream.finish()
+
+
