@@ -196,7 +196,7 @@ def _update_task_status(task_id, status):
         job_cur_status = task.job.update_status()
         transaction.commit()
 
-        if job_cur_status != job_old_status and job_cur_status in (STATUS_ERROR, STATUS_COMPLETE):
+        if job_cur_status != job_old_status and job_cur_status in (STATUS_ERROR, STATUS_COMPLETE, STATUS_ABORTED):
             task.job.workflow.update_status()
             transaction.commit()
         
