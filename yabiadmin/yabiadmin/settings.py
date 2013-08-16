@@ -391,21 +391,17 @@ LOGGING = {
         }
     },
     'loggers': {
+        '': {
+            'handlers':['console', 'mail_admins'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
         'django': {
             'handlers':['console'],
             'propagate': True,
             'level':'INFO',
         },
-        'django.request': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
-        'djamboloader': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
-        },
+            'handlers': ['console', 'mail_admins'],
         'yabiadmin': {
             'handlers': ['console'],
             'level': 'DEBUG'
