@@ -10,33 +10,14 @@
 
 {% block block_content %}
 
-
-<h2>Celery Processes</h2>
-
-<table>
-<tr>
-<th>PID</th>
-<th>Name</th>
-<th>Command</th>
-</tr>
-
 {% if celery_procs %}
       {% for item in celery_procs %}
-      <tr>
         <td>{{item.pid}}</td>
         <td>{{item.name}}</td>
         <td>{{item.cmdline|join:" "}}</td>
-      </tr>
       {% endfor %}
 {% else %}
-<tr>
-<td colspan="3">No celery processes found.</td>
-</tr>
 {% endif %}
-
-</table>
-
-
 <h2>Settings</h2>
 
 <table>
